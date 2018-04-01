@@ -162,11 +162,18 @@ kms_pts_data_reset (KmsPtsData * data)
 }
 
 static void
-kms_player_endpoint_set_caps (KmsPlayerEndpoint * self)
+kms_player_endpoint_disable_decoding (KmsPlayerEndpoint * self)
 {
+  /* By setting the caps of the uridecodebin element, with all formats
+   * except 'application/x-rtp', what we achieve is that all incoming formats
+   * will be passed directly to the media pipeline (as is expected of the
+   * 'useEncodedMedia' mode), but incoming RTP streams will still be depayloaded.
+   * Passing RTP packets directly to the pipeline, without depayloading,
+   * is not supported. */
+
   GstCaps *deco_caps;
 
-  deco_caps = gst_caps_from_string (KMS_AGNOSTIC_CAPS_CAPS);
+  deco_caps = gst_caps_from_string (KMS_AGNOSTIC_NO_RTP_CAPS);
   g_object_set (G_OBJECT (self->priv->uridecodebin), "caps", deco_caps, NULL);
   gst_caps_unref (deco_caps);
 }
@@ -181,7 +188,7 @@ kms_player_endpoint_set_property (GObject * object, guint property_id,
     case PROP_USE_ENCODED_MEDIA:{
       playerendpoint->priv->use_encoded_media = g_value_get_boolean (value);
       if (playerendpoint->priv->use_encoded_media) {
-        kms_player_endpoint_set_caps (playerendpoint);
+        kms_player_endpoint_disable_decoding (playerendpoint);
       }
       break;
     }
@@ -659,6 +666,7 @@ kms_player_end_point_add_appsrc (KmsPlayerEndpoint * self,
 
   /* Create appsrc element and link to agnosticbin */
   appsrc = gst_element_factory_make ("appsrc", NULL);
+
   g_object_set (G_OBJECT (appsrc), "is-live", TRUE, "do-timestamp", TRUE,
       "min-latency", G_GUINT64_CONSTANT (0), "max-latency",
       G_GUINT64_CONSTANT (0), "format", GST_FORMAT_TIME,
@@ -670,38 +678,15 @@ kms_player_end_point_add_appsrc (KmsPlayerEndpoint * self,
   g_object_unref (srcpad);
 
   gst_bin_add (GST_BIN (self), appsrc);
+
   if (!gst_element_link (appsrc, agnosticbin)) {
-    GST_ERROR ("Could not link %s to element %s", GST_ELEMENT_NAME (appsrc),
+    GST_ERROR ("Cannot link elements: %s to %s", GST_ELEMENT_NAME (appsrc),
         GST_ELEMENT_NAME (agnosticbin));
   }
 
   gst_element_sync_state_with_parent (appsrc);
 
   return appsrc;
-}
-
-static GstPadProbeReturn
-set_appsrc_caps (GstPad * pad, GstPadProbeInfo * info, gpointer element)
-{
-  GstEvent *event = GST_PAD_PROBE_INFO_EVENT (info);
-  GstElement *appsrc = GST_ELEMENT (element);
-  GstCaps *caps;
-
-  if (GST_EVENT_TYPE (event) != GST_EVENT_CAPS) {
-    return GST_PAD_PROBE_OK;
-  }
-
-  gst_event_parse_caps (event, &caps);
-  if (caps == NULL) {
-    GST_ERROR_OBJECT (pad, "Invalid caps received");
-    return GST_PAD_PROBE_OK;
-  }
-
-  GST_DEBUG_OBJECT (appsrc, "Setting caps %" GST_PTR_FORMAT, caps);
-
-  g_object_set (G_OBJECT (appsrc), "caps", caps, NULL);
-
-  return GST_PAD_PROBE_OK;
 }
 
 static void
@@ -749,11 +734,15 @@ kms_player_end_point_get_agnostic_for_pad (KmsPlayerEndpoint * self,
   audio_caps = gst_caps_from_string (KMS_AGNOSTIC_AUDIO_CAPS);
   video_caps = gst_caps_from_string (KMS_AGNOSTIC_VIDEO_CAPS);
 
+  GST_DEBUG_OBJECT (pad, "Check required caps: %" GST_PTR_FORMAT, caps);
+
   /* TODO: Update latency probe to set valid and media type */
   if (gst_caps_can_intersect (audio_caps, caps)) {
     agnosticbin = kms_element_get_audio_agnosticbin (KMS_ELEMENT (self));
+    GST_DEBUG_OBJECT (pad, "Detected audio caps");
     kms_player_end_point_add_stat_probe (self, pad, KMS_MEDIA_TYPE_AUDIO);
   } else if (gst_caps_can_intersect (video_caps, caps)) {
+    GST_DEBUG_OBJECT (pad, "Detected video caps");
     agnosticbin = kms_element_get_video_agnosticbin (KMS_ELEMENT (self));
     kms_player_end_point_add_stat_probe (self, pad, KMS_MEDIA_TYPE_VIDEO);
   }
@@ -763,6 +752,30 @@ kms_player_end_point_get_agnostic_for_pad (KmsPlayerEndpoint * self,
   gst_caps_unref (video_caps);
 
   return agnosticbin;
+}
+
+static GstPadProbeReturn
+set_appsrc_caps (GstPad * pad, GstPadProbeInfo * info, gpointer element)
+{
+  GstEvent *event = GST_PAD_PROBE_INFO_EVENT (info);
+  GstElement *appsrc = GST_ELEMENT (element);
+  GstCaps *caps;
+
+  if (GST_EVENT_TYPE (event) != GST_EVENT_CAPS) {
+    return GST_PAD_PROBE_OK;
+  }
+
+  gst_event_parse_caps (event, &caps);
+  if (caps == NULL) {
+    GST_ERROR_OBJECT (pad, "Invalid caps received");
+    return GST_PAD_PROBE_OK;
+  }
+
+  GST_DEBUG_OBJECT (appsrc, "Setting caps %" GST_PTR_FORMAT, caps);
+
+  g_object_set (G_OBJECT (appsrc), "caps", caps, NULL);
+
+  return GST_PAD_PROBE_OK;
 }
 
 static GstPadProbeReturn
@@ -805,11 +818,13 @@ internal_pipeline_probe (GstPad * pad, GstPadProbeInfo * info, gpointer element)
 }
 
 static void
-pad_added (GstElement * element, GstPad * pad, KmsPlayerEndpoint * self)
+kms_player_endpoint_uridecodebin_pad_added (GstElement * element, GstPad * pad,
+    KmsPlayerEndpoint * self)
 {
   GstElement *appsink, *appsrc;
   GstElement *agnosticbin;
   GstPad *sinkpad;
+  GstPadLinkReturn link_ret;
 
   GST_DEBUG_OBJECT (pad, "Pad added");
 
@@ -854,7 +869,15 @@ pad_added (GstElement * element, GstPad * pad, KmsPlayerEndpoint * self)
   }
 
   gst_bin_add (GST_BIN (self->priv->pipeline), appsink);
-  gst_pad_link (pad, sinkpad);
+
+  link_ret = gst_pad_link (pad, sinkpad);
+
+  if (GST_PAD_LINK_FAILED (link_ret)) {
+    GST_ERROR ("Cannot link elements: %s to %s: %s",
+        GST_ELEMENT_NAME (GST_PAD_PARENT (pad)),
+        GST_ELEMENT_NAME (GST_PAD_PARENT (sinkpad)),
+        gst_pad_link_get_name (link_ret));
+  }
 
   g_object_unref (sinkpad);
 
@@ -876,7 +899,8 @@ kms_remove_element_from_bin (GstBin * bin, GstElement * element)
 }
 
 static void
-pad_removed (GstElement * element, GstPad * pad, KmsPlayerEndpoint * self)
+kms_player_endpoint_uridecodebin_pad_removed (GstElement * element,
+    GstPad * pad, KmsPlayerEndpoint * self)
 {
   GstElement *appsink, *appsrc;
 
@@ -1223,6 +1247,7 @@ bus_sync_signal_handler (GstBus * bus, GstMessage * msg, gpointer data)
         kms_player_endpoint_emit_EOS_signal, g_object_ref (self),
         g_object_unref);
   } else if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR) {
+    GST_ERROR_OBJECT (self, "Error: %" GST_PTR_FORMAT, msg);
 
     if (g_str_has_prefix (GST_OBJECT_NAME (msg->src), "decodebin")) {
       kms_loop_idle_add_full (self->priv->loop, G_PRIORITY_HIGH_IDLE,
@@ -1235,7 +1260,6 @@ bus_sync_signal_handler (GstBus * bus, GstMessage * msg, gpointer data)
     } else {
       ErrorData *data = create_error_data (self, msg);
 
-      GST_ERROR_OBJECT (self, "Error: %" GST_PTR_FORMAT, msg);
       kms_loop_idle_add_full (self->priv->loop, G_PRIORITY_HIGH_IDLE,
           kms_player_endpoint_post_media_error, data, delete_error_data);
     }
@@ -1244,8 +1268,8 @@ bus_sync_signal_handler (GstBus * bus, GstMessage * msg, gpointer data)
 }
 
 static void
-source_setup_cb (GstElement * uridecodebin, GstElement * source,
-    KmsPlayerEndpoint * self)
+kms_player_endpoint_uridecodebin_source_setup (GstElement * uridecodebin,
+    GstElement * source, KmsPlayerEndpoint * self)
 {
   GstPad *srcpad;
 
@@ -1272,7 +1296,8 @@ source_setup_cb (GstElement * uridecodebin, GstElement * source,
 }
 
 static void
-element_added (GstBin * bin, GstElement * element, gpointer data)
+kms_player_endpoint_uridecodebin_element_added (GstBin * bin,
+    GstElement * element, gpointer data)
 {
   KmsPlayerEndpoint *self = KMS_PLAYER_ENDPOINT (data);
 
@@ -1283,9 +1308,51 @@ element_added (GstBin * bin, GstElement * element, gpointer data)
   }
 }
 
-static gboolean
-process_bus_message (GstBus * bus, GstMessage * message, gpointer data)
+static void
+log_bus_issue (GstElement * self, GstBin * bin, GstBus * bus,
+    GstMessage * msg, gboolean is_error)
 {
+  GstDebugLevel log_level = is_error ? GST_LEVEL_ERROR : GST_LEVEL_WARNING;
+
+  GError *err = NULL;
+  gchar *dbg_info = NULL;
+  gst_message_parse_error (msg, &err, &dbg_info);
+
+  gint err_code = (err ? err->code : -1);
+  gchar *err_msg = (err ? g_strdup (err->message) : g_strdup ("None"));
+
+  GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, log_level, self,
+      "Element '%s' issue code %d: %s", GST_ELEMENT_NAME (bin), err_code,
+      err_msg);
+  GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, log_level, self,
+      "Debugging info: %s", ((dbg_info) ? dbg_info : "None"));
+
+  gchar *dot_name = g_strdup_printf ("%s_bus_%d", GST_ELEMENT_NAME (self),
+      err_code);
+  GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (bin, GST_DEBUG_GRAPH_SHOW_ALL, dot_name);
+  g_free (dot_name);
+
+  g_error_free (err);
+  g_free (dbg_info);
+  g_free (err_msg);
+}
+
+static gboolean
+process_bus_message (GstBus * bus, GstMessage * msg, KmsPlayerEndpoint * self)
+{
+  switch (GST_MESSAGE_TYPE (msg)) {
+    case GST_MESSAGE_ERROR:
+      log_bus_issue (GST_ELEMENT (self), GST_BIN (self->priv->pipeline),
+          bus, msg, TRUE);
+      break;
+    case GST_MESSAGE_WARNING:
+      log_bus_issue (GST_ELEMENT (self), GST_BIN (self->priv->pipeline),
+          bus, msg, FALSE);
+      break;
+    default:
+      break;
+  }
+
   return TRUE;
 }
 
@@ -1311,17 +1378,17 @@ kms_player_endpoint_init (KmsPlayerEndpoint * self)
 
   /* Connect to signals */
   g_signal_connect (self->priv->uridecodebin, "pad-added",
-      G_CALLBACK (pad_added), self);
+      G_CALLBACK (kms_player_endpoint_uridecodebin_pad_added), self);
   g_signal_connect (self->priv->uridecodebin, "pad-removed",
-      G_CALLBACK (pad_removed), self);
+      G_CALLBACK (kms_player_endpoint_uridecodebin_pad_removed), self);
   g_signal_connect (self->priv->uridecodebin, "source-setup",
-      G_CALLBACK (source_setup_cb), self);
+      G_CALLBACK (kms_player_endpoint_uridecodebin_source_setup), self);
   g_signal_connect (self->priv->uridecodebin, "element-added",
-      G_CALLBACK (element_added), self);
+      G_CALLBACK (kms_player_endpoint_uridecodebin_element_added), self);
 
   /* Eat all async messages such as buffering messages */
   bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
-  gst_bus_add_watch (bus, process_bus_message, NULL);
+  gst_bus_add_watch (bus, (GstBusFunc) process_bus_message, self);
 
   g_object_set (self->priv->uridecodebin, "download", TRUE, NULL);
 
@@ -1335,7 +1402,6 @@ kms_player_endpoint_init (KmsPlayerEndpoint * self)
 gboolean
 kms_player_endpoint_plugin_init (GstPlugin * plugin)
 {
-
   return gst_element_register (plugin, PLUGIN_NAME, GST_RANK_NONE,
       KMS_TYPE_PLAYER_ENDPOINT);
 }

@@ -122,6 +122,7 @@ check_support_for_h264 ()
   plugin = gst_plugin_load_by_name ("openh264");
 
   if (plugin == NULL) {
+    GST_WARNING ("H264 is NOT supported: Plugin 'openh264' not found");
     return;
   }
 
@@ -477,7 +478,16 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
 
   try {
     turnURL = getConfigValue <std::string, WebRtcEndpoint> ("turnURL");
-    GST_INFO ("Using TURN relay server: %s", turnURL.c_str());
+
+    std::string safeURL = "<user:password>";
+    size_t separatorPos = turnURL.find_last_of('@');
+    if (separatorPos == std::string::npos) {
+      safeURL.append("@").append(turnURL);
+    } else {
+      safeURL.append(turnURL.substr(separatorPos));
+    }
+    GST_INFO ("Using TURN relay server: %s", safeURL.c_str());
+
     g_object_set (G_OBJECT (element), "turn-url", turnURL.c_str(), NULL);
   } catch (boost::property_tree::ptree_error &) {
     GST_INFO ("TURN server IP address not found in config;"
