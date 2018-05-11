@@ -54,8 +54,6 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 namespace kurento
 {
 
-static const uint DEFAULT_STUN_PORT = 3478;
-
 std::once_flag check_openh264, certificates_flag;
 std::string defaultCertificateRSA, defaultCertificateECDSA;
 std::vector<std::string> supported_codecs = { "VP8", "opus", "PCMU" };
@@ -435,9 +433,6 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
                        std::dynamic_pointer_cast<MediaObjectImpl>
                        (mediaPipeline), FACTORY_NAME)
 {
-  uint stunPort;
-  std::string stunAddress;
-  std::string turnURL;
 
   std::call_once (check_openh264, check_support_for_h264);
   std::call_once (certificates_flag,
@@ -450,50 +445,6 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
   remove_not_supported_codecs (element);
 
   //set properties
-  try {
-    stunPort = getConfigValue <uint, WebRtcEndpoint> ("stunServerPort");
-  } catch (std::exception &) {
-    GST_INFO ("STUN server Port not found in config;"
-              " using default value: %d", DEFAULT_STUN_PORT);
-    stunPort = DEFAULT_STUN_PORT;
-  }
-
-  if (stunPort != 0) {
-    try {
-      stunAddress = getConfigValue
-                    <std::string, WebRtcEndpoint> ("stunServerAddress");
-    } catch (boost::property_tree::ptree_error &) {
-      GST_INFO ("STUN server IP address not found in config;"
-                " NAT traversal requires either STUN or TURN server");
-    }
-
-    if (!stunAddress.empty()) {
-      GST_INFO ("Using STUN reflexive server IP: %s", stunAddress.c_str());
-      GST_INFO ("Using STUN reflexive server Port: %d", stunPort);
-
-      g_object_set (G_OBJECT (element), "stun-server-port", stunPort, NULL);
-      g_object_set (G_OBJECT (element), "stun-server", stunAddress.c_str(), NULL);
-    }
-  }
-
-  try {
-    turnURL = getConfigValue <std::string, WebRtcEndpoint> ("turnURL");
-
-    std::string safeURL = "<user:password>";
-    size_t separatorPos = turnURL.find_last_of('@');
-    if (separatorPos == std::string::npos) {
-      safeURL.append("@").append(turnURL);
-    } else {
-      safeURL.append(turnURL.substr(separatorPos));
-    }
-    GST_INFO ("Using TURN relay server: %s", safeURL.c_str());
-
-    g_object_set (G_OBJECT (element), "turn-url", turnURL.c_str(), NULL);
-  } catch (boost::property_tree::ptree_error &) {
-    GST_INFO ("TURN server IP address not found in config;"
-              " NAT traversal requires either STUN or TURN server");
-  }
-
   switch (certificateKeyType->getValue () ) {
   case CertificateKeyType::RSA: {
     if (defaultCertificateRSA != "") {
