@@ -62,7 +62,6 @@ typedef struct _KmsCompositeMixerPrivate KmsCompositeMixerPrivate;
 struct _KmsCompositeMixer
 {
   KmsBaseHub parent;
-
   /*< private > */
   KmsCompositeMixerPrivate *priv;
 };
