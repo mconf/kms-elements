@@ -21,6 +21,8 @@
 #include <jsonrpc/JsonSerializer.hpp>
 #include <KurentoException.hpp>
 #include <gst/gst.h>
+#include "HubPortImpl.hpp"
+#include "HubPort.hpp"
 
 #define GST_CAT_DEFAULT kurento_composite_impl
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
@@ -37,12 +39,35 @@ CompositeImpl::CompositeImpl (const boost::property_tree::ptree &conf,
 {
 }
 
+void CompositeImpl::setLayoutType (int layoutType)
+{
+  g_object_set (element, "layout-type", layoutType, NULL);
+}
+
+int CompositeImpl::getLayoutType ()
+{
+  int layoutType;
+
+  g_object_get (element, "layout-type", &layoutType, NULL);
+  return layoutType;
+}
+
+void CompositeImpl::setVideoFloor (std::shared_ptr<HubPort> videoFloor)
+{
+  std::shared_ptr<HubPortImpl> mixerPort =
+    std::dynamic_pointer_cast<HubPortImpl> (videoFloor);
+  int i = mixerPort->getHandlerId();
+  g_object_set (element, "video-floor", i, NULL);
+}
+
+
 MediaObjectImpl *
 CompositeImplFactory::createObject (const boost::property_tree::ptree &conf,
                                     std::shared_ptr<MediaPipeline> mediaPipeline) const
 {
   return new CompositeImpl (conf, mediaPipeline);
 }
+
 
 CompositeImpl::StaticConstructor CompositeImpl::staticConstructor;
 
@@ -51,5 +76,6 @@ CompositeImpl::StaticConstructor::StaticConstructor()
   GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, GST_DEFAULT_NAME, 0,
                            GST_DEFAULT_NAME);
 }
+
 
 } /* kurento */
