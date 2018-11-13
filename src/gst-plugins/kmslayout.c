@@ -88,7 +88,7 @@ void kms_layout_update_position_output(KmsPosition * position)
     "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1, NULL);
   g_object_set(user->capsfilter, "caps", filtercaps, NULL);
   g_object_set(user->video_mixer_pad, "xpos", position->left, "ypos", position->top,
-      "alpha", 1.0, NULL);
+      "zorder", 1, "alpha", 1.0, NULL);
   gst_caps_unref(filtercaps);
 }
 
@@ -103,10 +103,10 @@ void kms_layout_hide_user(KmsUser * user)
   GstCaps *filtercaps = NULL;
 
   filtercaps = gst_caps_new_simple ("video/x-raw",
-    "width", G_TYPE_INT, 0, "height", G_TYPE_INT, 0,
+    "width", G_TYPE_INT, 100, "height", G_TYPE_INT, 100,
     "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1, NULL);
   g_object_set(user->capsfilter, "caps", filtercaps, NULL);
-  g_object_set(user->video_mixer_pad, "xpos", 0, "ypos", 0,
+  g_object_set(user->video_mixer_pad, "xpos", 0, "ypos", 0, "zorder", 0,
       "alpha", 0, NULL);
   gst_caps_unref(filtercaps);
 }
@@ -164,10 +164,10 @@ void kms_layout_reset_position(KmsPosition * position)
   {
     KmsUser *user = position->user;
     GstCaps *filtercaps = gst_caps_new_simple ("video/x-raw",
-      "width", G_TYPE_INT, 0, "height", G_TYPE_INT, 0,
+      "width", G_TYPE_INT, 100, "height", G_TYPE_INT, 100,
       "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1, NULL);
     g_object_set(user->capsfilter, "caps", filtercaps, NULL);
-    g_object_set(user->video_mixer_pad, "xpos", 0, "ypos", 0,
+    g_object_set(user->video_mixer_pad, "xpos", 0, "ypos", 0, "zorder", 0,
         "alpha", 0, NULL);
     gst_caps_unref(filtercaps);
   }
