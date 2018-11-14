@@ -224,7 +224,6 @@ KmsPosition * kms_layout_find_available_position(KmsLayout *self)
   if (self->priv->type == LAYOUT_0) {
     position = g_slice_new0(KmsPosition);
     g_array_append_val(self->priv->position_array, position);
-    GST_ERROR("01");
     return position;
   }
   for (i = 0; i < len; i++)
@@ -234,11 +233,9 @@ KmsPosition * kms_layout_find_available_position(KmsLayout *self)
     /* Available slot */
     if (position && position->available)
     {
-      GST_ERROR("02");
       return position;
     }
   }
-  GST_ERROR("03");
   return NULL;
 }
 
@@ -612,7 +609,6 @@ void kms_layout_create_new_user(KmsLayout * self, GstElement * capsfilter,
   {
     kms_layout_hide_user(user);
     KMS_LAYOUT_UNLOCK(self);
-    GST_ERROR("FOI");
     return;
   }
   
