@@ -51,7 +51,7 @@ BOOST_GLOBAL_FIXTURE (GF)
 GF::GF()
 {
   boost::property_tree::ptree ac, audioCodecs, vc, videoCodecs;
-  gst_init (NULL, NULL);
+  gst_init(nullptr, nullptr);
 
   moduleManager.loadModulesFromDirectories ("../../src/server:../../..");
 
@@ -77,7 +77,7 @@ std::string exec (const std::string &str)
   std::string result = "";
 
   while (!feof (pipe.get() ) ) {
-    if (fgets (buffer, 128, pipe.get() ) != NULL) {
+    if (fgets(buffer, 128, pipe.get()) != nullptr) {
       result += buffer;
     }
   }
@@ -113,9 +113,7 @@ releaseRecorderEndpoint (std::shared_ptr<RecorderEndpointImpl> &ep)
   MediaSet::getMediaSet ()->release (id);
 }
 
-static std::shared_ptr <MediaElementImpl>
-createTestSrc (void)
-{
+static std::shared_ptr<MediaElementImpl> createTestSrc() {
   std::shared_ptr <MediaElementImpl> src = std::dynamic_pointer_cast
       <MediaElementImpl> (MediaSet::getMediaSet()->ref (new  MediaElementImpl (
                             boost::property_tree::ptree(),

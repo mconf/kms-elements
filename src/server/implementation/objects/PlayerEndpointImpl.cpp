@@ -22,6 +22,7 @@
 #include <DotGraph.hpp>
 #include <jsonrpc/JsonSerializer.hpp>
 #include <KurentoException.hpp>
+#include <memory>
 #include <gst/gst.h>
 #include "SignalHandler.hpp"
 
@@ -52,7 +53,7 @@ void PlayerEndpointImpl::invalidUri ()
 {
   try {
     /* TODO: Define error codes and types*/
-    Error error (shared_from_this(), "Invalid Uri", 0, "INVALID_URI");
+    Error error (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
 
     signalError (error);
   } catch (std::bad_weak_ptr &e) {
@@ -133,7 +134,7 @@ std::shared_ptr<VideoInfo> PlayerEndpointImpl::getVideoInfo ()
 
   g_object_get (G_OBJECT (element), VIDEO_DATA, &video_data, NULL);
 
-  if (video_data == NULL) {
+  if (video_data == nullptr) {
     GST_ERROR ("structure null");
   }
 
@@ -162,9 +163,9 @@ std::string PlayerEndpointImpl::getElementGstreamerDot ()
 {
   GValue *pipeline;
   g_object_get (G_OBJECT (element), PIPELINE, &pipeline, NULL);
-  return generateDotGraph (GST_BIN (pipeline),
-                           std::shared_ptr <GstreamerDotDetails> (new GstreamerDotDetails (
-                                 GstreamerDotDetails::SHOW_VERBOSE) ) );
+  return generateDotGraph(
+      GST_BIN(pipeline),
+      std::make_shared<GstreamerDotDetails>(GstreamerDotDetails::SHOW_VERBOSE));
 }
 
 void PlayerEndpointImpl::setPosition (int64_t position)

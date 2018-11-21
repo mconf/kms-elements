@@ -50,7 +50,7 @@ BOOST_GLOBAL_FIXTURE (GF)
 GF::GF()
 {
   boost::property_tree::ptree ac, audioCodecs, vc, videoCodecs;
-  gst_init (NULL, NULL);
+  gst_init(nullptr, nullptr);
 
   moduleManager.loadModulesFromDirectories ("../../src/server:../../..");
 
@@ -89,9 +89,7 @@ releasePlayerEndpoint (std::shared_ptr<PlayerEndpointImpl> &ep)
   MediaSet::getMediaSet ()->release (id);
 }
 
-static std::shared_ptr <MediaElementImpl>
-createTestSink (void)
-{
+static std::shared_ptr<MediaElementImpl> createTestSink() {
   std::shared_ptr <MediaElementImpl> src = std::dynamic_pointer_cast
       <MediaElementImpl> (MediaSet::getMediaSet()->ref (new  MediaElementImpl (
                             boost::property_tree::ptree(),
@@ -117,8 +115,8 @@ eos_received ()
 {
   std::shared_ptr <PlayerEndpointImpl> player = createPlayerEndpoint ();
   std::shared_ptr <MediaElementImpl> sink = createTestSink();
-  GCond cond;
-  GMutex mutex;
+  GCond cond{};
+  GMutex mutex{};
   bool eos = false;
   gint64 end_time;
 
@@ -162,8 +160,8 @@ eos_received_with_no_accept_eos_sink ()
 {
   std::shared_ptr <PlayerEndpointImpl> player = createPlayerEndpoint ();
   std::shared_ptr <MediaElementImpl> sink = createTestSink();
-  GCond cond;
-  GMutex mutex;
+  GCond cond{};
+  GMutex mutex{};
   bool eos = false;
   gint64 end_time;
 
