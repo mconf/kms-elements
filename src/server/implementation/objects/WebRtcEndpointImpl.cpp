@@ -36,6 +36,7 @@
 #include <RTCPeerConnectionStats.hpp>
 #include <commons/kmsstats.h>
 #include <commons/kmsutils.h>
+#include <commons/gstsdpdirection.h>
 
 #include "webrtcendpoint/kmswebrtcdatachannelstate.h"
 #include <boost/algorithm/string.hpp>
@@ -65,7 +66,7 @@ remove_not_supported_codecs_from_array (GstElement *element, GArray *codecs)
 {
   guint i;
 
-  if (codecs == NULL) {
+  if (codecs == nullptr) {
     return;
   }
 
@@ -83,10 +84,9 @@ remove_not_supported_codecs_from_array (GstElement *element, GArray *codecs)
     s = gst_value_get_structure (v);
     codec_name = gst_structure_get_name (s);
 
-    for (std::vector<std::string>::iterator it = supported_codecs.begin();
-         it != supported_codecs.end(); ++it) {
+    for (auto &supported_codec : supported_codecs) {
 
-      if (boost::istarts_with (codec_name, (*it) ) ) {
+      if (boost::istarts_with(codec_name, supported_codec)) {
         supported = TRUE;
         break;
       }
@@ -121,12 +121,12 @@ check_support_for_h264 ()
 
   plugin = gst_plugin_load_by_name ("openh264");
 
-  if (plugin == NULL) {
+  if (plugin == nullptr) {
     GST_WARNING ("H264 is NOT supported: Plugin 'openh264' not found");
     return;
   }
 
-  supported_codecs.push_back ("H264");
+  supported_codecs.emplace_back("H264");
   gst_object_unref (plugin);
 }
 
@@ -173,7 +173,7 @@ void WebRtcEndpointImpl::checkUri (std::string &uri)
     try {
       path = getConfigValue <std::string, WebRtcEndpoint> (CONFIG_PATH);
     } catch (boost::property_tree::ptree_error &e) {
-      GST_DEBUG ("WebRtcEndpoint config file doesn't contain a defaul path");
+      GST_DEBUG ("WebRtcEndpoint config file doesn't contain a default path");
       path = getConfigValue <std::string> (CONFIG_PATH, DEFAULT_PATH);
     }
 
@@ -429,7 +429,8 @@ WebRtcEndpointImpl::getCerficateFromFile (std::string &path)
 
 WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
                                         std::shared_ptr<MediaPipeline>
-                                        mediaPipeline, bool useDataChannels,
+                                        mediaPipeline, bool recvonly,
+                                        bool sendonly, bool useDataChannels,
                                         std::shared_ptr<CertificateKeyType> certificateKeyType) :
   BaseRtpEndpointImpl (conf,
                        std::dynamic_pointer_cast<MediaObjectImpl>
@@ -442,6 +443,14 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
   std::call_once (check_openh264, check_support_for_h264);
   std::call_once (certificates_flag,
                   std::bind (&WebRtcEndpointImpl::generateDefaultCertificates, this) );
+
+  if (recvonly) {
+    g_object_set (element, "offer-dir", GST_SDP_DIRECTION_RECVONLY, NULL);
+  }
+
+  if (sendonly) {
+    g_object_set (element, "offer-dir", GST_SDP_DIRECTION_SENDONLY, NULL);
+  }
 
   if (useDataChannels) {
     g_object_set (element, "use-data-channels", TRUE, NULL);
@@ -555,7 +564,7 @@ WebRtcEndpointImpl::getStunServerAddress ()
 
   g_object_get ( G_OBJECT (element), "stun-server", &ret, NULL);
 
-  if (ret != NULL) {
+  if (ret != nullptr) {
     stunServerAddress = std::string (ret);
     g_free (ret);
   }
@@ -596,7 +605,7 @@ WebRtcEndpointImpl::getTurnUrl ()
 
   g_object_get ( G_OBJECT (element), "turn-url", &ret, NULL);
 
-  if (ret != NULL) {
+  if (ret != nullptr) {
     turnUrl = std::string (ret);
     g_free (ret);
   }
@@ -660,9 +669,8 @@ WebRtcEndpointImpl::addIceCandidate (std::shared_ptr<IceCandidate> candidate)
   std::string cand_str = candidate->getCandidate();
   std::string mid_str = candidate->getSdpMid ();
   guint8 sdp_m_line_index = candidate->getSdpMLineIndex ();
-  KmsIceCandidate *cand = kms_ice_candidate_new (cand_str.c_str(),
-                          mid_str.c_str(),
-                          sdp_m_line_index, NULL);
+  KmsIceCandidate *cand = kms_ice_candidate_new(
+      cand_str.c_str(), mid_str.c_str(), sdp_m_line_index, nullptr);
 
   if (cand) {
     g_signal_emit_by_name (element, "add-ice-candidate", this->sessId.c_str (),
@@ -907,14 +915,14 @@ WebRtcEndpointImpl::fillStatsReport (std::map
                                      <std::string, std::shared_ptr<Stats>>
                                      &report, const GstStructure *stats, double timestamp)
 {
-  const GstStructure *data_stats = NULL;
+  const GstStructure *data_stats = nullptr;
 
   BaseRtpEndpointImpl::fillStatsReport (report, stats, timestamp);
 
   data_stats = kms_utils_get_structure_by_name (stats,
                KMS_DATA_SESSION_STATISTICS_FIELD);
 
-  if (data_stats != NULL) {
+  if (data_stats != nullptr) {
     return collectRTCDataChannelStats (report, timestamp, data_stats);
   }
 }
@@ -922,10 +930,11 @@ WebRtcEndpointImpl::fillStatsReport (std::map
 MediaObjectImpl *
 WebRtcEndpointImplFactory::createObject (const boost::property_tree::ptree
     &conf, std::shared_ptr<MediaPipeline>
-    mediaPipeline, bool useDataChannels,
+    mediaPipeline, bool recvonly, bool sendonly, bool useDataChannels,
     std::shared_ptr<CertificateKeyType> certificateKeyType) const
 {
-  return new WebRtcEndpointImpl (conf, mediaPipeline, useDataChannels,
+  return new WebRtcEndpointImpl (conf, mediaPipeline, recvonly,
+                                 sendonly, useDataChannels,
                                  certificateKeyType);
 }
 
