@@ -29,6 +29,7 @@
 #define LATENCY 600             //ms
 #define DEFAULT_VIDEOMIXER_OUTPUT_WIDTH 1280
 #define DEFAULT_VIDEOMIXER_OUTPUT_HEIGHT 720
+#define DEFAULT_VIDEOMIXER_FRAMERATE 15
 
 #define PLUGIN_NAME "compositemixer"
 
@@ -121,6 +122,8 @@ typedef struct _KmsCompositeMixerData
   gint id;
   KmsCompositeMixer *mixer;
   GstElement *capsfilter;
+  GstElement *videorate;
+  GstElement *videorate_capsfilter;
   GstElement *tee;
   GstElement *fakesink;
   gboolean input;
@@ -247,6 +250,8 @@ remove_elements_from_pipeline (KmsCompositeMixerData * port_data)
 
   gst_bin_remove_many (GST_BIN (self),
       g_object_ref (port_data->capsfilter),
+      g_object_ref (port_data->videorate),
+      g_object_ref (port_data->videorate_capsfilter),
       g_object_ref (port_data->tee), g_object_ref (port_data->fakesink), NULL);
 
   kms_base_hub_unlink_video_src (KMS_BASE_HUB (self), port_data->id);
@@ -254,16 +259,22 @@ remove_elements_from_pipeline (KmsCompositeMixerData * port_data)
   KMS_COMPOSITE_MIXER_UNLOCK (self);
 
   gst_element_set_state (port_data->capsfilter, GST_STATE_NULL);
+  gst_element_set_state (port_data->videorate, GST_STATE_NULL);
+  gst_element_set_state (port_data->videorate_capsfilter, GST_STATE_NULL);
   gst_element_set_state (port_data->tee, GST_STATE_NULL);
   gst_element_set_state (port_data->fakesink, GST_STATE_NULL);
 
   g_object_unref (port_data->capsfilter);
+  g_object_unref (port_data->videorate);
+  g_object_unref (port_data->videorate_capsfilter);
   g_object_unref (port_data->tee);
   g_object_unref (port_data->fakesink);
   g_object_unref (port_data->tee_sink_pad);
 
   port_data->tee_sink_pad = NULL;
   port_data->capsfilter = NULL;
+  port_data->videorate = NULL;
+  port_data->videorate_capsfilter = NULL;
   port_data->tee = NULL;
   port_data->fakesink = NULL;
 
@@ -535,7 +546,7 @@ kms_composite_mixer_port_data_create (KmsCompositeMixer * mixer, gint id)
   KmsCompositeMixerData *data;
   gchar *padname;
   GstPad *tee_src;
-  GstCaps *filtercaps;
+  GstCaps *filtercaps, *videorate_filtercaps;
 
   data = kms_create_composite_mixer_data ();
   data->mixer = mixer;
@@ -547,6 +558,8 @@ kms_composite_mixer_port_data_create (KmsCompositeMixer * mixer, gint id)
   data->tee = gst_element_factory_make ("tee", NULL);
   data->fakesink = gst_element_factory_make ("fakesink", NULL);
   data->capsfilter = gst_element_factory_make ("capsfilter", NULL);
+  data->videorate = gst_element_factory_make ("videorate", NULL);
+  data->videorate_capsfilter = gst_element_factory_make ("capsfilter", NULL);
 
   g_object_set (G_OBJECT (data->capsfilter), "caps-change-mode",
       1 /*delayed */ , NULL);
@@ -554,9 +567,12 @@ kms_composite_mixer_port_data_create (KmsCompositeMixer * mixer, gint id)
   g_object_set (G_OBJECT (data->fakesink), "async", FALSE, "sync", FALSE, NULL);
 
   gst_bin_add_many (GST_BIN (mixer), data->capsfilter, data->tee,
+      data->videorate, data->videorate_capsfilter,
       data->fakesink, NULL);
 
   gst_element_sync_state_with_parent (data->capsfilter);
+  gst_element_sync_state_with_parent (data->videorate);
+  gst_element_sync_state_with_parent (data->videorate_capsfilter);
   gst_element_sync_state_with_parent (data->tee);
   gst_element_sync_state_with_parent (data->fakesink);
 
@@ -568,12 +584,23 @@ kms_composite_mixer_port_data_create (KmsCompositeMixer * mixer, gint id)
   g_object_set (data->capsfilter, "caps", filtercaps, NULL);
   gst_caps_unref (filtercaps);
 
+  videorate_filtercaps =
+      gst_caps_new_simple ("video/x-raw",
+      "framerate", GST_TYPE_FRACTION, DEFAULT_VIDEOMIXER_FRAMERATE, 1,
+      NULL);
+  g_object_set (data->videorate_capsfilter, "caps", videorate_filtercaps,
+    NULL);
+  gst_caps_unref (videorate_filtercaps);
+
   /*link basemixer -> video_agnostic */
   kms_base_hub_link_video_sink (KMS_BASE_HUB (mixer), data->id,
       data->capsfilter, "sink", FALSE);
 
   data->tee_sink_pad = gst_element_get_static_pad (data->tee, "sink");
-  gst_element_link_pads (data->capsfilter, NULL, data->tee,
+
+  gst_element_link_many (data->capsfilter, data->videorate,
+    data->videorate_capsfilter, NULL);
+  gst_element_link_pads (data->videorate_capsfilter, NULL, data->tee,
       GST_OBJECT_NAME (data->tee_sink_pad));
 
   tee_src = gst_element_get_request_pad (data->tee, "src_%u");
@@ -692,7 +719,9 @@ kms_composite_mixer_handle_port (KmsBaseHub * mixer,
       filtercaps =
           gst_caps_new_simple ("video/x-raw",
           "width", G_TYPE_INT, self->priv->output_width,
-          "height", G_TYPE_INT, self->priv->output_height, NULL);
+          "height", G_TYPE_INT, self->priv->output_height,
+          "framerate", GST_TYPE_FRACTION, DEFAULT_VIDEOMIXER_FRAMERATE, 1,
+          NULL);
       g_object_set (G_OBJECT (capsfilter), "caps", filtercaps, NULL);
       gst_caps_unref (filtercaps);
 
