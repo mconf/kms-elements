@@ -25,10 +25,10 @@
 #include <commons/kmsrefstruct.h>
 #include <math.h>
 #include "kmslayout.h"
+#include <stdlib.h>
 
 #define LATENCY 600             //ms
-#define DEFAULT_VIDEOMIXER_OUTPUT_WIDTH 1280
-#define DEFAULT_VIDEOMIXER_OUTPUT_HEIGHT 720
+#define DEFAULT_VIDEOMIXER_OUTPUT_RESOLUTION "1280x720"
 #define DEFAULT_VIDEOMIXER_FRAMERATE 15
 
 #define PLUGIN_NAME "compositemixer"
@@ -99,6 +99,7 @@ struct _KmsCompositeMixerPrivate
   GRecMutex mutex;
   gint n_elems;
   gint output_width, output_height;
+  gchar *output_resolution;
   KmsLayout *layout;
 };
 
@@ -106,7 +107,8 @@ enum
 {
   PROP_0,
   PROP_LAYOUT_TYPE,
-  PROP_VIDEO_FLOOR
+  PROP_VIDEO_FLOOR,
+  PROP_OUTPUT_RESOLUTION
 };
 
 /* class initialization */
@@ -224,6 +226,61 @@ static void kms_composite_mixer_change_layout(KmsCompositeMixer * self,
   kms_layout_change_layout(self->priv->layout, layout_id);
   KMS_COMPOSITE_MIXER_UNLOCK(self);
   kms_composite_mixer_recalculate_sizes(self);
+}
+
+static void
+kms_composite_mixer_set_output_resolution(KmsCompositeMixer * self,
+  const gchar * output_resolution)
+{
+
+  if (!output_resolution) {
+    return;
+  }
+
+  KMS_COMPOSITE_MIXER_LOCK(self);
+
+  if (self->priv->videomixer) {
+    GST_WARNING("Could not set output resolution: compositor already "\
+      "have hubports");
+    KMS_COMPOSITE_MIXER_UNLOCK(self);
+    return;
+  }
+
+  gchar **new_resolution =
+    g_strsplit(output_resolution, "x", 2);
+
+  if (!new_resolution) {
+    KMS_COMPOSITE_MIXER_UNLOCK(self);
+    return;
+  }
+
+  gint output_width = atoi(new_resolution[0]);
+  gint output_height = atoi(new_resolution[1]);
+
+  g_strfreev(new_resolution);
+
+  if (self == NULL || output_width < 100 || output_height < 100) {
+    GST_ERROR("Could not update output resolution - minimum dimension allowed"\
+      " is 100");
+    KMS_COMPOSITE_MIXER_UNLOCK(self);
+    return;
+  }
+
+  if ((output_width != self->priv->output_width) ||
+      (output_height != self->priv->output_height)) {
+
+    self->priv->output_width = output_width;
+    self->priv->output_height = output_height;
+    kms_layout_set_layout_width(self->priv->layout, self->priv->output_width);
+    kms_layout_set_layout_height(self->priv->layout, self->priv->output_height);
+    kms_layout_change_layout(self->priv->layout, LAYOUT_0);
+
+    //TODO: change output resolution in a running compositor and update layout
+
+  }
+
+  KMS_COMPOSITE_MIXER_UNLOCK(self);
+
 }
 
 static gboolean
@@ -788,6 +845,10 @@ kms_composite_set_property (GObject * object, guint property_id,
       kms_layout_set_floor(self->priv->layout, g_value_get_int(value));
       KMS_COMPOSITE_MIXER_UNLOCK (self);
       break;
+    case PROP_OUTPUT_RESOLUTION:
+      kms_composite_mixer_set_output_resolution(self,
+        g_value_get_string(value));
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -888,6 +949,12 @@ kms_composite_mixer_class_init (KmsCompositeMixerClass * klass)
       g_param_spec_int ("video-floor", "Video Floor",
           "Video Floor", 0, G_MAXINT, LAYOUT_0,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_OUTPUT_RESOLUTION,
+    g_param_spec_string ("output-resolution",
+        "Output Resolution",
+        "Composite Output Resolution",
+        DEFAULT_VIDEOMIXER_OUTPUT_RESOLUTION,
+        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /* Registers a private structure for the instantiatable type */
   g_type_class_add_private (klass, sizeof (KmsCompositeMixerPrivate));
@@ -903,14 +970,20 @@ kms_composite_mixer_init (KmsCompositeMixer * self)
   self->priv->ports = g_hash_table_new_full (g_int_hash, g_int_equal,
       release_gint, kms_composite_mixer_port_data_destroy);
   //TODO:Obtain the dimensions of the bigger input stream
-  self->priv->output_height = 720;
-  self->priv->output_width = 1280;
+
+  gchar **output_resolution =
+    g_strsplit(DEFAULT_VIDEOMIXER_OUTPUT_RESOLUTION, "x", 2);
+
+  self->priv->output_width = atoi(output_resolution[0]);
+  self->priv->output_height = atoi(output_resolution[1]);
+
+  g_strfreev(output_resolution);
   self->priv->n_elems = LAYOUT_0;
   self->priv->layout = kms_layout_new ();
   self->priv->loop = kms_loop_new ();
 
-  kms_layout_set_layout_width(self->priv->layout, DEFAULT_VIDEOMIXER_OUTPUT_WIDTH);
-  kms_layout_set_layout_height(self->priv->layout, DEFAULT_VIDEOMIXER_OUTPUT_HEIGHT);
+  kms_layout_set_layout_width(self->priv->layout, self->priv->output_width);
+  kms_layout_set_layout_height(self->priv->layout, self->priv->output_height);
   kms_layout_change_layout(self->priv->layout, LAYOUT_0);
 }
 

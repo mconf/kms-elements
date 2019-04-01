@@ -44,6 +44,9 @@ class CompositeImpl : public HubImpl, public virtual Composite
 
     void setVideoFloor (std::shared_ptr<HubPort> videoFloor);
 
+    virtual void setOutputResolution (const std::string &outputResolution);
+    virtual std::string getOutputResolution ();
+
     /* Next methods are automatically implemented by code generator */
     virtual bool connect (const std::string &eventType,
                           std::shared_ptr<EventHandler> handler);

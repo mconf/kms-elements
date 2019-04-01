@@ -442,8 +442,8 @@ void kms_layout_set_layout_0(KmsLayout *self) {
 
   self->priv->max_users = 99; // infinite
   self->priv->type = LAYOUT_0;
-  self->priv->width = 1280;
-  self->priv->height = 720;
+  self->priv->width = self->priv->width;
+  self->priv->height = self->priv->height;
   kms_layout_remove_empty_slots(self->priv->position_array);
   kms_layout_recalculate_all_users(self);
   KMS_LAYOUT_UNLOCK(self);
@@ -500,8 +500,6 @@ void kms_layout_set_layout_1(KmsLayout *self) {
   self->priv->position_array = position_array;
   self->priv->max_users = 6;
   self->priv->type = LAYOUT_1;
-  self->priv->width = 1280;
-  self->priv->height = 720;
 
   KMS_LAYOUT_UNLOCK(self);
 }
@@ -532,8 +530,6 @@ void kms_layout_set_layout_2(KmsLayout *self) {
   self->priv->position_array = position_array;
   self->priv->max_users = 1;
   self->priv->type = LAYOUT_2;
-  self->priv->width = 1280;
-  self->priv->height = 720;
 
   KMS_LAYOUT_UNLOCK(self);
 }
@@ -611,7 +607,7 @@ void kms_layout_create_new_user(KmsLayout * self, GstElement * capsfilter,
     KMS_LAYOUT_UNLOCK(self);
     return;
   }
-  
+
   kms_layout_insert_user(position, user);
   if (self->priv->type == LAYOUT_0)
   {
@@ -860,6 +856,8 @@ kms_layout_init (KmsLayout * self)
   self->priv->type = LAYOUT_0;
   self->priv->max_users = 0;
   self->priv->user_array = g_array_new(FALSE, FALSE, sizeof(KmsUser *));
+  self->priv->width = 1280;
+  self->priv->height = 720;
 }
 
 /**

@@ -60,6 +60,26 @@ void CompositeImpl::setVideoFloor (std::shared_ptr<HubPort> videoFloor)
   g_object_set (element, "video-floor", i, NULL);
 }
 
+void CompositeImpl::setOutputResolution (const std::string &outputResolution)
+{
+  g_object_set ( G_OBJECT (element), "output-resolution",
+    outputResolution.c_str(), NULL);
+}
+
+std::string CompositeImpl::getOutputResolution ()
+{
+  std::string outputResolution;
+  gchar *ret;
+
+  g_object_get ( G_OBJECT (element), "output-resolution", &ret, NULL);
+
+  if (ret != NULL) {
+    outputResolution = std::string (ret);
+    g_free (ret);
+  }
+
+  return outputResolution;
+}
 
 MediaObjectImpl *
 CompositeImplFactory::createObject (const boost::property_tree::ptree &conf,

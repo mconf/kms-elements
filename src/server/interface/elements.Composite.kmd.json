@@ -9,6 +9,11 @@
           "name": "layoutType",
           "doc": "TODO",
           "type": "int"
+        },
+        {
+          "name": "outputResolution",
+          "doc": "Set the output resolution of video composition",
+          "type": "String"
         }
       ],
       "constructor":
