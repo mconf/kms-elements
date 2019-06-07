@@ -4,6 +4,18 @@
       "name": "Composite",
       "extends": "Hub",
       "doc": "A :rom:cls:`Hub` that mixes the :rom:attr:`MediaType.AUDIO` stream of its connected sources and constructs a grid with the :rom:attr:`MediaType.VIDEO` streams of its connected sources into its sink",
+      "properties": [
+        {
+          "name": "layoutType",
+          "doc": "TODO",
+          "type": "int"
+        },
+        {
+          "name": "outputResolution",
+          "doc": "Set the output resolution of video composition",
+          "type": "String"
+        }
+      ],
       "constructor":
         {
           "doc": "Create for the given pipeline",
@@ -14,7 +26,20 @@
               "type": "MediaPipeline"
             }
           ]
-        }
+        },
+        "methods": [
+          {
+            "name": "setVideoFloor",
+            "doc": "<p>",
+            "params": [
+              {
+                "name": "videoFloor",
+                "doc": "",
+                "type": "HubPort"
+              }
+            ]
+          }
+        ]
     }
   ]
 }

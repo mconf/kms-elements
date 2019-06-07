@@ -31,6 +31,7 @@
 #include <commons/sdpagent/kmssdprtpavpfmediahandler.h>
 #include <commons/sdpagent/kmssdpsdesext.h>
 #include <commons/kmsrefstruct.h>
+#include <stun/usages/bind.h>
 #include "kms-rtp-enumtypes.h"
 #include "kmsrtpsdescryptosuite.h"
 #include "kmsrandom.h"
@@ -310,6 +311,43 @@ kms_rtp_endpoint_get_connection (KmsRtpEndpoint * self, KmsSdpSession * sess,
   }
 }
 
+
+static gchar *
+kms_rtp_endpoint_get_public_ip_address(const gchar * server_ip,
+  const guint server_port)
+{
+  struct sockaddr_in server_address;
+  union {
+    struct sockaddr_storage storage;
+    struct sockaddr addr;
+  } public_ip_address;
+
+  socklen_t public_ip_address_len = sizeof (public_ip_address);
+
+  gchar * public_ip_address_string = NULL;
+
+  stun_debug_disable();
+
+  server_address.sin_family = AF_INET;
+  server_address.sin_addr.s_addr = inet_addr(server_ip);
+  server_address.sin_port = htons(server_port);
+
+  StunUsageBindReturn stun_ret;
+
+  stun_ret = stun_usage_bind_run ((struct sockaddr*)&server_address,
+                     sizeof(struct sockaddr_in),
+                     &public_ip_address.storage,
+                     &public_ip_address_len);
+
+  if (stun_ret) {
+    GST_WARNING("Could not determine public ip address");
+  } else {
+    struct sockaddr_in *public_address = (struct sockaddr_in*) &public_ip_address.addr;
+    public_ip_address_string = g_strdup(inet_ntoa(public_address->sin_addr));
+  }
+  return public_ip_address_string;
+}
+
 /* Internal session management begin */
 
 static void
@@ -318,50 +356,62 @@ kms_rtp_endpoint_set_addr (KmsRtpEndpoint * self)
   GList *ips, *l;
   gboolean done = FALSE;
 
-  ips = nice_interfaces_get_local_ips (FALSE);
-  for (l = ips; l != NULL && !done; l = l->next) {
-    GInetAddress *addr;
-    gboolean is_ipv6 = FALSE;
+  if (self->parent.stun_server_ip) {
+    GST_ERROR("Stun server found for RTPEndpoint %s",
+      self->parent.stun_server_ip);
 
-    GST_DEBUG_OBJECT (self, "Check local address: %s", (const gchar*)l->data);
-    addr = g_inet_address_new_from_string (l->data);
+    gchar * public_ip_address =
+      kms_rtp_endpoint_get_public_ip_address (self->parent.stun_server_ip,
+        self->parent.stun_server_port);
 
-    if (G_IS_INET_ADDRESS (addr)) {
-      switch (g_inet_address_get_family (addr)) {
-        case G_SOCKET_FAMILY_INVALID:
-        case G_SOCKET_FAMILY_UNIX:
-          /* Ignore this addresses */
-          break;
-        case G_SOCKET_FAMILY_IPV6:
-          is_ipv6 = TRUE;
-        case G_SOCKET_FAMILY_IPV4:
-        {
-          gchar *addr_str;
-          gboolean use_ipv6;
+    g_object_set (self, "addr", public_ip_address, NULL);
+    g_free (public_ip_address);
+    done = TRUE;
+  } else {
+    ips = nice_interfaces_get_local_ips (FALSE);
+    for (l = ips; l != NULL && !done; l = l->next) {
+      GInetAddress *addr;
+      gboolean is_ipv6 = FALSE;
 
-          g_object_get (self, "use-ipv6", &use_ipv6, NULL);
-          if (is_ipv6 != use_ipv6) {
-            GST_DEBUG_OBJECT (self, "Skip address (wanted IPv6: %d)", use_ipv6);
+      GST_DEBUG_OBJECT (self, "Check local address: %s", (const gchar*)l->data);
+      addr = g_inet_address_new_from_string (l->data);
+      if (G_IS_INET_ADDRESS (addr)) {
+        switch (g_inet_address_get_family (addr)) {
+          case G_SOCKET_FAMILY_INVALID:
+          case G_SOCKET_FAMILY_UNIX:
+            /* Ignore this addresses */
             break;
-          }
+          case G_SOCKET_FAMILY_IPV6:
+            is_ipv6 = TRUE;
+          case G_SOCKET_FAMILY_IPV4:
+          {
+            gchar *addr_str;
+            gboolean use_ipv6;
 
-          addr_str = g_inet_address_to_string (addr);
-          if (addr_str != NULL) {
-            g_object_set (self, "addr", addr_str, NULL);
-            g_free (addr_str);
-            done = TRUE;
+            g_object_get (self, "use-ipv6", &use_ipv6, NULL);
+            if (is_ipv6 != use_ipv6) {
+              GST_DEBUG_OBJECT (self, "Skip address (wanted IPv6: %d)", use_ipv6);
+              break;
+            }
+
+            addr_str = g_inet_address_to_string (addr);
+            if (addr_str != NULL) {
+              g_object_set (self, "addr", addr_str, NULL);
+              g_free (addr_str);
+              done = TRUE;
+            }
+            break;
           }
           break;
         }
       }
-    }
 
-    if (G_IS_OBJECT (addr)) {
-      g_object_unref (addr);
+      if (G_IS_OBJECT (addr)) {
+        g_object_unref (addr);
+      }
     }
+    g_list_free_full (ips, g_free);
   }
-
-  g_list_free_full (ips, g_free);
 
   if (!done) {
     GST_WARNING_OBJECT (self, "Addr not set");

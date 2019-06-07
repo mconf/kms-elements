@@ -119,7 +119,7 @@ check_support_for_h264 ()
 {
   GstPlugin *plugin;
 
-  plugin = gst_plugin_load_by_name ("openh264");
+  plugin = gst_plugin_load_by_name ("x264");
 
   if (plugin == nullptr) {
     GST_WARNING ("H264 is NOT supported: Plugin 'openh264' not found");
