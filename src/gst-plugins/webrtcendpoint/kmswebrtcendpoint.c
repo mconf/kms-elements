@@ -50,17 +50,11 @@ G_DEFINE_TYPE (KmsWebrtcEndpoint, kms_webrtc_endpoint,
   )                                             \
 )
 
-#define DEFAULT_STUN_SERVER_IP NULL
-#define DEFAULT_STUN_SERVER_PORT 3478
-#define DEFAULT_STUN_TURN_URL NULL
 #define DEFAULT_PEM_CERTIFICATE NULL
 
 enum
 {
   PROP_0,
-  PROP_STUN_SERVER_IP,
-  PROP_STUN_SERVER_PORT,
-  PROP_TURN_URL,                /* user:password@address:port?transport=[udp|tcp|tls] */
   PROP_PEM_CERTIFICATE,
   N_PROPERTIES
 };
@@ -89,9 +83,6 @@ struct _KmsWebrtcEndpointPrivate
   KmsLoop *loop;
   GMainContext *context;
 
-  gchar *stun_server_ip;
-  guint stun_server_port;
-  gchar *turn_url;
   gchar *pem_certificate;
 };
 
@@ -308,9 +299,9 @@ kms_webrtc_endpoint_create_session_internal (KmsBaseSdpEndpoint * base_sdp,
   g_object_bind_property (self, "pem-certificate",
       webrtc_sess, "pem-certificate", G_BINDING_DEFAULT);
 
-  g_object_set (webrtc_sess, "stun-server", self->priv->stun_server_ip,
-      "stun-server-port", self->priv->stun_server_port,
-      "turn-url", self->priv->turn_url,
+  g_object_set (webrtc_sess, "stun-server", self->parent.stun_server_ip,
+      "stun-server-port", self->parent.stun_server_port,
+      "turn-url", self->parent.turn_url,
       "pem-certificate", self->priv->pem_certificate, NULL);
 
   g_signal_connect (webrtc_sess, "on-ice-candidate",
@@ -461,17 +452,6 @@ kms_webrtc_endpoint_set_property (GObject * object, guint prop_id,
   KMS_ELEMENT_LOCK (self);
 
   switch (prop_id) {
-    case PROP_STUN_SERVER_IP:
-      g_free (self->priv->stun_server_ip);
-      self->priv->stun_server_ip = g_value_dup_string (value);
-      break;
-    case PROP_STUN_SERVER_PORT:
-      self->priv->stun_server_port = g_value_get_uint (value);
-      break;
-    case PROP_TURN_URL:
-      g_free (self->priv->turn_url);
-      self->priv->turn_url = g_value_dup_string (value);
-      break;
     case PROP_PEM_CERTIFICATE:
       g_free (self->priv->pem_certificate);
       self->priv->pem_certificate = g_value_dup_string (value);
@@ -493,15 +473,6 @@ kms_webrtc_endpoint_get_property (GObject * object, guint prop_id,
   KMS_ELEMENT_LOCK (self);
 
   switch (prop_id) {
-    case PROP_STUN_SERVER_IP:
-      g_value_set_string (value, self->priv->stun_server_ip);
-      break;
-    case PROP_STUN_SERVER_PORT:
-      g_value_set_uint (value, self->priv->stun_server_port);
-      break;
-    case PROP_TURN_URL:
-      g_value_set_string (value, self->priv->turn_url);
-      break;
     case PROP_PEM_CERTIFICATE:
       g_value_set_string (value, self->priv->pem_certificate);
       break;
@@ -537,8 +508,6 @@ kms_webrtc_endpoint_finalize (GObject * object)
 
   GST_DEBUG_OBJECT (self, "finalize");
 
-  g_free (self->priv->stun_server_ip);
-  g_free (self->priv->turn_url);
   g_free (self->priv->pem_certificate);
 
   g_main_context_unref (self->priv->context);
@@ -689,27 +658,6 @@ kms_webrtc_endpoint_class_init (KmsWebrtcEndpointClass * klass)
   klass->get_data_channel_supported =
       kms_webrtc_endpoint_get_data_channel_supported;
 
-  g_object_class_install_property (gobject_class, PROP_STUN_SERVER_IP,
-      g_param_spec_string ("stun-server",
-          "StunServer",
-          "Stun Server IP Address",
-          DEFAULT_STUN_SERVER_IP, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_STUN_SERVER_PORT,
-      g_param_spec_uint ("stun-server-port",
-          "StunServerPort",
-          "Stun Server Port",
-          1, G_MAXUINT16, DEFAULT_STUN_SERVER_PORT,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_TURN_URL,
-      g_param_spec_string ("turn-url",
-          "TurnUrl",
-          "TURN server URL with this format: 'user:password@address:port(?transport=[udp|tcp|tls])'."
-          "'address' must be an IP (not a domain)."
-          "'transport' is optional (UDP by default).",
-          DEFAULT_STUN_TURN_URL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
   g_object_class_install_property (gobject_class, PROP_PEM_CERTIFICATE,
       g_param_spec_string ("pem-certificate",
           "PemCertificate",
@@ -844,9 +792,6 @@ kms_webrtc_endpoint_init (KmsWebrtcEndpoint * self)
       TRUE, "rtcp-remb", TRUE, NULL);
 
   self->priv = KMS_WEBRTC_ENDPOINT_GET_PRIVATE (self);
-  self->priv->stun_server_ip = DEFAULT_STUN_SERVER_IP;
-  self->priv->stun_server_port = DEFAULT_STUN_SERVER_PORT;
-  self->priv->turn_url = DEFAULT_STUN_TURN_URL;
 
   self->priv->loop = kms_loop_new ();
   g_object_get (self->priv->loop, "context", &self->priv->context, NULL);

@@ -20,7 +20,6 @@
 #include "HubImpl.hpp"
 #include "Composite.hpp"
 #include <EventHandler.hpp>
-
 namespace kurento
 {
 
@@ -33,24 +32,32 @@ void Serialize (std::shared_ptr<CompositeImpl> &object,
 class CompositeImpl : public HubImpl, public virtual Composite
 {
 
-public:
+  public:
 
-  CompositeImpl (const boost::property_tree::ptree &conf,
-                 std::shared_ptr<MediaPipeline> mediaPipeline);
+    CompositeImpl (const boost::property_tree::ptree &conf,
+                   std::shared_ptr<MediaPipeline> mediaPipeline);
 
-  virtual ~CompositeImpl () {};
+    virtual ~CompositeImpl () {};
 
-  /* Next methods are automatically implemented by code generator */
-  virtual bool connect (const std::string &eventType,
-                        std::shared_ptr<EventHandler> handler);
+    virtual void setLayoutType (int layoutType);
+    virtual int getLayoutType ();
 
-  virtual void invoke (std::shared_ptr<MediaObjectImpl> obj,
-                       const std::string &methodName, const Json::Value &params,
-                       Json::Value &response);
+    void setVideoFloor (std::shared_ptr<HubPort> videoFloor);
 
-  virtual void Serialize (JsonSerializer &serializer);
+    virtual void setOutputResolution (const std::string &outputResolution);
+    virtual std::string getOutputResolution ();
 
-private:
+    /* Next methods are automatically implemented by code generator */
+    virtual bool connect (const std::string &eventType,
+                          std::shared_ptr<EventHandler> handler);
+
+    virtual void invoke (std::shared_ptr<MediaObjectImpl> obj,
+                         const std::string &methodName, const Json::Value &params,
+                         Json::Value &response);
+
+    virtual void Serialize (JsonSerializer &serializer);
+
+  private:
 
   class StaticConstructor
   {
