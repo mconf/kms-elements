@@ -57,9 +57,9 @@ namespace kurento
 
 static const uint DEFAULT_STUN_PORT = 3478;
 
-std::once_flag check_openh264, certificates_flag;
-std::string defaultCertificateRSA, defaultCertificateECDSA;
-std::vector<std::string> supported_codecs = { "VP8", "opus", "PCMU" };
+static std::once_flag check_openh264, certificates_flag;
+static std::string defaultCertificateRSA, defaultCertificateECDSA;
+static std::vector<std::string> supported_codecs = { "VP8", "opus", "PCMU" };
 
 static void
 remove_not_supported_codecs_from_array (GstElement *element, GArray *codecs)
@@ -653,6 +653,13 @@ WebRtcEndpointImpl::addIceCandidate (std::shared_ptr<IceCandidate> candidate)
   std::string cand_str = candidate->getCandidate();
   std::string mid_str = candidate->getSdpMid ();
   guint8 sdp_m_line_index = candidate->getSdpMLineIndex ();
+
+  if (cand_str.empty()) {
+    // This is an end-of-candidates notification, part of Trickle ICE.
+    // Just ignore it.
+    return;
+  }
+
   KmsIceCandidate *cand = kms_ice_candidate_new(
       cand_str.c_str(), mid_str.c_str(), sdp_m_line_index, nullptr);
 
@@ -660,10 +667,10 @@ WebRtcEndpointImpl::addIceCandidate (std::shared_ptr<IceCandidate> candidate)
     g_signal_emit_by_name (element, "add-ice-candidate", this->sessId.c_str (),
                            cand, &ret);
     g_object_unref (cand);
-  }
 
-  if (!ret) {
-    throw KurentoException (ICE_ADD_CANDIDATE_ERROR, "Error adding candidate");
+    if (!ret) {
+      throw KurentoException (ICE_ADD_CANDIDATE_ERROR, "Error adding candidate");
+    }
   }
 }
 
