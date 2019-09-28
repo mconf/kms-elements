@@ -251,7 +251,6 @@ HttpEndpointImpl::HttpEndpointImpl (const boost::property_tree::ptree &conf,
 
         GST_ERROR ("%s", errorMessage.c_str() );
 
-        std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
         signalError (error);
       } catch (std::bad_weak_ptr &e) {
       }
@@ -260,7 +259,6 @@ HttpEndpointImpl::HttpEndpointImpl (const boost::property_tree::ptree &conf,
         MediaSessionStarted event (shared_from_this(),
                                    MediaSessionStarted::getName() );
 
-        std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
         signalMediaSessionStarted (event);
       } catch (std::bad_weak_ptr &e) {
       }
@@ -312,13 +310,12 @@ HttpEndpointImpl::HttpEndpointImpl (const boost::property_tree::ptree &conf,
       MediaSessionTerminated event (shared_from_this(),
                                     MediaSessionTerminated::getName() );
 
-      std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
       signalMediaSessionTerminated (event);
     } catch (std::bad_weak_ptr &e) {
     }
   };
 
-  uint httpServicePort = 0;
+  uint httpServicePort;
   getConfigValue <uint, HttpEndpoint> (&httpServicePort, HTTP_SERVICE_PORT,
       HttpEndPointServer::DEFAULT_PORT);
 

@@ -45,7 +45,6 @@ void PlayerEndpointImpl::eosHandler ()
   try {
     EndOfStream event (shared_from_this(), EndOfStream::getName() );
 
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalEndOfStream (event);
   } catch (std::bad_weak_ptr &e) {
   }
@@ -57,7 +56,6 @@ void PlayerEndpointImpl::invalidUri ()
     /* TODO: Define error codes and types*/
     Error error (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
 
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalError (error);
   } catch (std::bad_weak_ptr &e) {
   }
@@ -69,7 +67,6 @@ void PlayerEndpointImpl::invalidMedia ()
     /* TODO: Define error codes and types*/
     Error error (shared_from_this(), "Invalid Media", 0, "INVALID_MEDIA");
 
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalError (error);
   } catch (std::bad_weak_ptr &e) {
   }
