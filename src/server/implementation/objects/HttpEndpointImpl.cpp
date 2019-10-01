@@ -247,22 +247,23 @@ HttpEndpointImpl::HttpEndpointImpl (const boost::property_tree::ptree &conf,
       std::string errorMessage = "Invalid or unexpected request received";
 
       try {
-        Error error (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
-
-        GST_ERROR ("%s", errorMessage.c_str() );
-
-        std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
-        signalError (error);
-      } catch (std::bad_weak_ptr &e) {
+        Error event (shared_from_this (), "Invalid URI", 0, "INVALID_URI");
+        GST_ERROR ("%s", errorMessage.c_str ());
+        sigcSignalEmit(signalError, event);
+      } catch (const std::bad_weak_ptr &e) {
+        // shared_from_this()
+        GST_ERROR ("BUG creating %s: %s", Error::getName ().c_str (),
+            e.what ());
       }
     } else {
       try {
-        MediaSessionStarted event (shared_from_this(),
-                                   MediaSessionStarted::getName() );
-
-        std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
-        signalMediaSessionStarted (event);
-      } catch (std::bad_weak_ptr &e) {
+        MediaSessionStarted event (shared_from_this (),
+            MediaSessionStarted::getName ());
+        sigcSignalEmit(signalMediaSessionStarted, event);
+      } catch (const std::bad_weak_ptr &e) {
+        // shared_from_this()
+        GST_ERROR ("BUG creating %s: %s",
+            MediaSessionStarted::getName ().c_str (), e.what ());
       }
     }
   };
@@ -309,12 +310,13 @@ HttpEndpointImpl::HttpEndpointImpl (const boost::property_tree::ptree &conf,
     }
 
     try {
-      MediaSessionTerminated event (shared_from_this(),
-                                    MediaSessionTerminated::getName() );
-
-      std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
-      signalMediaSessionTerminated (event);
-    } catch (std::bad_weak_ptr &e) {
+      MediaSessionTerminated event (shared_from_this (),
+          MediaSessionTerminated::getName());
+      sigcSignalEmit(signalMediaSessionTerminated, event);
+    } catch (const std::bad_weak_ptr &e) {
+      // shared_from_this()
+      GST_ERROR ("BUG creating %s: %s",
+          MediaSessionTerminated::getName ().c_str (), e.what ());
     }
   };
 
