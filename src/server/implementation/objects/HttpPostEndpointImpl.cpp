@@ -39,7 +39,7 @@ void HttpPostEndpointImpl::eosLambda ()
   try {
     EndOfStream event (shared_from_this(), EndOfStream::getName() );
 
-    sigcSignalEmit(signalEndOfStream, event);
+    signalEndOfStream (event);
   } catch (std::bad_weak_ptr &e) {
   }
 }

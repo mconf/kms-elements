@@ -45,7 +45,7 @@ void PlayerEndpointImpl::eosHandler ()
   try {
     EndOfStream event (shared_from_this(), EndOfStream::getName() );
 
-    sigcSignalEmit(signalEndOfStream, event);
+    signalEndOfStream (event);
   } catch (std::bad_weak_ptr &e) {
   }
 }
@@ -54,9 +54,9 @@ void PlayerEndpointImpl::invalidUri ()
 {
   try {
     /* TODO: Define error codes and types*/
-    Error event (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
+    Error error (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
 
-    sigcSignalEmit(signalError, event);
+    signalError (error);
   } catch (std::bad_weak_ptr &e) {
   }
 }
@@ -65,9 +65,9 @@ void PlayerEndpointImpl::invalidMedia ()
 {
   try {
     /* TODO: Define error codes and types*/
-    Error event (shared_from_this(), "Invalid Media", 0, "INVALID_MEDIA");
+    Error error (shared_from_this(), "Invalid Media", 0, "INVALID_MEDIA");
 
-    sigcSignalEmit(signalError, event);
+    signalError (error);
   } catch (std::bad_weak_ptr &e) {
   }
 }
