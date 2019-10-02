@@ -166,40 +166,25 @@ RecorderEndpointImpl::onStateChanged (gint newState)
   switch (newState) {
   case KMS_URI_END_POINT_STATE_STOP: {
     GST_DEBUG_OBJECT (element, "State changed to Stopped");
-    try {
-      Stopped event (shared_from_this (), Stopped::getName ());
-      sigcSignalEmit(signalStopped, event);
-    } catch (const std::bad_weak_ptr &e) {
-      // shared_from_this()
-      GST_ERROR ("BUG creating %s: %s", Stopped::getName ().c_str (),
-          e.what ());
-    }
+    Stopped event (shared_from_this(), Stopped::getName() );
+
+    sigcSignalEmit(signalStopped, event);
     break;
   }
 
   case KMS_URI_END_POINT_STATE_START: {
     GST_DEBUG_OBJECT (element, "State changed to Recording");
-    try {
-      Recording event (shared_from_this(), Recording::getName () );
-      sigcSignalEmit(signalRecording, event);
-    } catch (const std::bad_weak_ptr &e) {
-      // shared_from_this()
-      GST_ERROR ("BUG creating %s: %s", Recording::getName ().c_str (),
-          e.what ());
-    }
+    Recording event (shared_from_this(), Recording::getName() );
+
+    sigcSignalEmit(signalRecording, event);
     break;
   }
 
   case KMS_URI_END_POINT_STATE_PAUSE: {
     GST_DEBUG_OBJECT (element, "State changed to Paused");
-    try {
-      Paused event (shared_from_this(), Paused::getName () );
-      sigcSignalEmit(signalPaused, event);
-    } catch (const std::bad_weak_ptr &e) {
-      // shared_from_this()
-      GST_ERROR ("BUG creating %s: %s", Paused::getName ().c_str (),
-          e.what ());
-    }
+    Paused event (shared_from_this(), Paused::getName() );
+
+    sigcSignalEmit(signalPaused, event);
     break;
   }
   }

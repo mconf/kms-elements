@@ -43,36 +43,32 @@ namespace kurento
 void PlayerEndpointImpl::eosHandler ()
 {
   try {
-    EndOfStream event (shared_from_this (), EndOfStream::getName ());
+    EndOfStream event (shared_from_this(), EndOfStream::getName() );
+
     sigcSignalEmit(signalEndOfStream, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", EndOfStream::getName ().c_str (),
-        e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 }
 
 void PlayerEndpointImpl::invalidUri ()
 {
-  /* TODO: Define error codes and types*/
   try {
-    Error event (shared_from_this (), "Invalid URI", 0, "INVALID_URI");
+    /* TODO: Define error codes and types*/
+    Error event (shared_from_this(), "Invalid URI", 0, "INVALID_URI");
+
     sigcSignalEmit(signalError, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", Error::getName ().c_str (), e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 }
 
 void PlayerEndpointImpl::invalidMedia ()
 {
-  /* TODO: Define error codes and types*/
   try {
-    Error event (shared_from_this (), "Invalid Media", 0, "INVALID_MEDIA");
+    /* TODO: Define error codes and types*/
+    Error event (shared_from_this(), "Invalid Media", 0, "INVALID_MEDIA");
+
     sigcSignalEmit(signalError, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", Error::getName ().c_str (), e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 }
 
