@@ -59,6 +59,8 @@ static const uint DEFAULT_STUN_PORT = 3478;
 
 static std::once_flag check_openh264, certificates_flag;
 static std::string defaultCertificateRSA, defaultCertificateECDSA;
+
+// "H264" gets added at runtime by check_support_for_h264()
 static std::vector<std::string> supported_codecs = { "VP8", "opus", "PCMU" };
 
 static void
@@ -501,20 +503,30 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
   remove_not_supported_codecs (element);
 
   //set properties
+
+  std::string externalIps;
+  if (getConfigValue <std::string, WebRtcEndpoint> (&externalIps, "externalAddresses")) {
+    GST_INFO ("Predefined external IP: %s", externalIps.c_str());
+    g_object_set (G_OBJECT (element), "external-ips", externalIps.c_str(), NULL);
+  } else {
+    GST_INFO ("No predefined external IP found in config;"
+              " you can set one or default to ICE automatic discovery");
+  }
+
   uint stunPort = 0;
   if (!getConfigValue <uint, WebRtcEndpoint> (&stunPort, "stunServerPort",
       DEFAULT_STUN_PORT)) {
-    GST_INFO ("STUN server Port not found in config;"
+    GST_INFO ("STUN port not found in config;"
               " using default value: %d", DEFAULT_STUN_PORT);
   } else {
     std::string stunAddress;
     if (!getConfigValue <std::string, WebRtcEndpoint> (&stunAddress,
         "stunServerAddress")) {
-      GST_INFO ("STUN server IP address not found in config;"
-                " NAT traversal requires either STUN or TURN server");
+      GST_INFO ("STUN server not found in config;"
+                " remember that NAT traversal requires STUN or TURN");
     } else {
-      GST_INFO ("Using STUN reflexive server IP: %s", stunAddress.c_str());
-      GST_INFO ("Using STUN reflexive server Port: %d", stunPort);
+      GST_INFO ("Using STUN reflexive server: %s:%d", stunAddress.c_str(),
+          stunPort);
 
       g_object_set (G_OBJECT (element), "stun-server-port", stunPort, NULL);
       g_object_set (G_OBJECT (element), "stun-server", stunAddress.c_str(), NULL);
@@ -534,8 +546,8 @@ WebRtcEndpointImpl::WebRtcEndpointImpl (const boost::property_tree::ptree &conf,
 
     g_object_set (G_OBJECT (element), "turn-url", turnURL.c_str(), NULL);
   } else {
-    GST_INFO ("TURN server IP address not found in config;"
-              " NAT traversal requires either STUN or TURN server");
+    GST_INFO ("TURN server not found in config;"
+              " remember that NAT traversal requires STUN or TURN");
   }
 
   switch (certificateKeyType->getValue () ) {
@@ -589,6 +601,31 @@ WebRtcEndpointImpl::~WebRtcEndpointImpl()
   if (handlerNewSelectedPairFull > 0) {
     unregister_signal_handler (element, handlerNewSelectedPairFull);
   }
+}
+
+std::string
+WebRtcEndpointImpl::getExternalAddresses ()
+{
+  std::string externalAddresses;
+  gchar *ret;
+
+  g_object_get ( G_OBJECT (element), "external-ips", &ret, NULL);
+
+  if (ret != nullptr) {
+    externalAddresses = std::string (ret);
+    g_free (ret);
+  }
+
+  return externalAddresses;
+}
+
+void
+WebRtcEndpointImpl::setExternalAddresses (const std::string &externalAddresses)
+{
+  GST_INFO ("Set external IP address: %s", externalAddresses.c_str());
+  g_object_set ( G_OBJECT (element), "external-ips",
+                 externalAddresses.c_str(),
+                 NULL);
 }
 
 std::string
