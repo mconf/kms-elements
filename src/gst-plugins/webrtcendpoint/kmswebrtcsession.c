@@ -36,8 +36,6 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappsink.h>
 
-#include <string.h>
-
 #include "kmsiceniceagent.h"
 #include <stdlib.h>
 
@@ -56,6 +54,7 @@ G_DEFINE_TYPE (KmsWebrtcSession, kms_webrtc_session, KMS_TYPE_BASE_RTP_SESSION);
 #define DEFAULT_STUN_TURN_URL NULL
 #define DEFAULT_DATA_CHANNELS_SUPPORTED FALSE
 #define DEFAULT_PEM_CERTIFICATE NULL
+#define DEFAULT_EXTERNAL_IPS NULL
 
 #define IP_VERSION_6 6
 
@@ -88,6 +87,7 @@ enum
   PROP_TURN_URL,                /* user:password@address:port?transport=[udp|tcp|tls] */
   PROP_DATA_CHANNEL_SUPPORTED,
   PROP_PEM_CERTIFICATE,
+  PROP_EXTERNAL_IPS,
   N_PROPERTIES
 };
 
@@ -367,7 +367,7 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (!self->gather_started) {
     GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " ICE Gathering not started yet");
     if (allow_error) {
       GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
@@ -382,7 +382,7 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (sdp_sess->local_sdp == NULL) {
     GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " Local SDP not generated yet");
     if (allow_error) {
       GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
@@ -399,7 +399,7 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (index >= gst_sdp_message_medias_len (sdp_sess->local_sdp)) {
     GST_ERROR_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " Invalid media index: %u", index);
     return FALSE;
   }
@@ -408,14 +408,14 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (media == NULL) {
     GST_ERROR_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " No media with index: %u", index);
     return FALSE;
   }
 
   if (gst_sdp_media_get_port (media) == 0) {
     GST_DEBUG_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " Unwanted media (port = 0): %s, index: %u",
         gst_sdp_media_get_media (media), index);
     return TRUE;
@@ -426,7 +426,7 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (handler == NULL) {
     GST_ERROR_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " No handler for media: %s, index: %u",
         gst_sdp_media_get_media (media), index);
     return FALSE;
@@ -437,7 +437,7 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
 
   if (stream_id == NULL) {
     GST_ERROR_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
+        "Adding remote candidate to libnice agent:"
         " No stream_id, index: %u", index);
     return FALSE;
   }
@@ -445,13 +445,13 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
   if (!kms_ice_base_agent_add_ice_candidate (self->agent, candidate,
       stream_id)) {
     GST_ERROR_OBJECT (self,
-        "Adding remote candidate to ICE Agent:"
-        " Agent failed, stream_id: '%s'", stream_id);
+        "Adding remote candidate to libnice agent:"
+        " Parsing failed, stream_id: '%s'", stream_id);
     return FALSE;
   }
 
   GST_DEBUG_OBJECT (self,
-      "Added remote candidate to ICE Agent, stream_id: '%s'", stream_id);
+      "Added remote candidate to libnice agent, stream_id: '%s'", stream_id);
 
   return TRUE;
 }
@@ -762,6 +762,17 @@ kms_webrtc_session_component_state_change (KmsIceBaseAgent * agent,
 }
 
 static void
+kms_webrtc_session_set_external_ips_info (KmsWebrtcSession * self,
+    KmsWebRtcBaseConnection * conn)
+{
+  if (self->external_ips == NULL) {
+    return;
+  }
+
+  kms_webrtc_base_connection_set_external_ips_info (conn, self->external_ips);
+}
+
+static void
 kms_webrtc_session_set_stun_server_info (KmsWebrtcSession * self,
     KmsWebRtcBaseConnection * conn)
 {
@@ -801,6 +812,7 @@ kms_webrtc_session_gather_candidates (KmsWebrtcSession * self)
   while (g_hash_table_iter_next (&iter, &key, &v)) {
     KmsWebRtcBaseConnection *conn = KMS_WEBRTC_BASE_CONNECTION (v);
 
+    kms_webrtc_session_set_external_ips_info (self, conn);
     kms_webrtc_session_set_stun_server_info (self, conn);
     kms_webrtc_session_set_relay_info (self, conn);
     if (!kms_ice_base_agent_start_gathering_candidates (conn->agent,
@@ -1692,6 +1704,10 @@ kms_webrtc_session_set_property (GObject * object, guint prop_id,
       g_free (self->pem_certificate);
       self->pem_certificate = g_value_dup_string (value);
       break;
+    case PROP_EXTERNAL_IPS:
+      g_free (self->external_ips);
+      self->external_ips = g_value_dup_string (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1724,6 +1740,9 @@ kms_webrtc_session_get_property (GObject * object, guint prop_id,
     case PROP_PEM_CERTIFICATE:
       g_value_set_string (value, self->pem_certificate);
       break;
+    case PROP_EXTERNAL_IPS:
+      g_value_set_string (value, self->external_ips);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1749,6 +1768,7 @@ kms_webrtc_session_finalize (GObject * object)
   g_free (self->turn_password);
   g_free (self->turn_address);
   g_free (self->pem_certificate);
+  g_free (self->external_ips);
 
   if (self->destroy_data != NULL && self->cb_data != NULL) {
     self->destroy_data (self->cb_data);
@@ -1855,6 +1875,8 @@ kms_webrtc_session_init (KmsWebrtcSession * self)
   self->stun_server_ip = DEFAULT_STUN_SERVER_IP;
   self->stun_server_port = DEFAULT_STUN_SERVER_PORT;
   self->turn_url = DEFAULT_STUN_TURN_URL;
+  self->pem_certificate = DEFAULT_PEM_CERTIFICATE;
+  self->external_ips = DEFAULT_EXTERNAL_IPS;
   self->gather_started = FALSE;
 
   self->data_channels = g_hash_table_new_full (g_direct_hash,
@@ -1947,6 +1969,12 @@ kms_webrtc_session_class_init (KmsWebrtcSessionClass * klass)
           "PemCertificate",
           "Pem certificate to be used in dtls",
           DEFAULT_PEM_CERTIFICATE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_EXTERNAL_IPS,
+      g_param_spec_string ("external-ips",
+          "ExternalIps",
+          "Predefined local IP addresses for gathering ICE candidates",
+          DEFAULT_EXTERNAL_IPS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_DATA_CHANNEL_SUPPORTED,
       g_param_spec_boolean ("data-channel-supported",
