@@ -54,7 +54,8 @@ G_DEFINE_TYPE (KmsWebrtcSession, kms_webrtc_session, KMS_TYPE_BASE_RTP_SESSION);
 #define DEFAULT_STUN_TURN_URL NULL
 #define DEFAULT_DATA_CHANNELS_SUPPORTED FALSE
 #define DEFAULT_PEM_CERTIFICATE NULL
-#define DEFAULT_EXTERNAL_IPS NULL
+#define DEFAULT_NETWORK_INTERFACES NULL
+#define DEFAULT_EXTERNAL_ADDRESS NULL
 
 #define IP_VERSION_6 6
 
@@ -87,7 +88,8 @@ enum
   PROP_TURN_URL,                /* user:password@address:port?transport=[udp|tcp|tls] */
   PROP_DATA_CHANNEL_SUPPORTED,
   PROP_PEM_CERTIFICATE,
-  PROP_EXTERNAL_IPS,
+  PROP_NETWORK_INTERFACES,
+  PROP_EXTERNAL_ADDRESS,
   N_PROPERTIES
 };
 
@@ -521,7 +523,7 @@ kms_webrtc_session_sdp_msg_add_ice_candidate (KmsWebrtcSession * self,
 
     if (gst_sdp_media_get_port (media) == 0) {
       GST_DEBUG_OBJECT (self,
-          "Adding local candidate to local SDP medias:"
+          "[IceCandidateFound] Adding local candidate to local SDP medias:"
           " Unwanted media (port = 0): %s, index: %u",
           gst_sdp_media_get_media (media), index);
       continue;
@@ -532,7 +534,7 @@ kms_webrtc_session_sdp_msg_add_ice_candidate (KmsWebrtcSession * self,
 
     if (handler == NULL) {
       GST_ERROR_OBJECT (self,
-          "Adding local candidate to local SDP medias:"
+          "[IceCandidateFound] Adding local candidate to local SDP medias:"
           " No handler for media: %s, index: %u",
           gst_sdp_media_get_media (media), index);
       continue;
@@ -543,7 +545,7 @@ kms_webrtc_session_sdp_msg_add_ice_candidate (KmsWebrtcSession * self,
     g_object_unref (handler);
 
     GST_DEBUG_OBJECT (self,
-        "Added local candidate to local SDP media: %s, index: %u",
+        "[IceCandidateFound] Added local candidate to local SDP media: %s, index: %u",
         gst_sdp_media_get_media (media), index);
 
     if (mid != NULL) {
@@ -572,6 +574,14 @@ static void
 kms_webrtc_session_new_candidate (KmsIceBaseAgent * agent,
     KmsIceCandidate * cand, KmsWebrtcSession * self)
 {
+  if (self->external_address != NULL) {
+    kms_ice_candidate_set_address (cand, self->external_address);
+
+    GST_DEBUG_OBJECT (self,
+        "[IceCandidateFound] Mangled local: '%s'",
+        kms_ice_candidate_get_candidate (cand));
+  }
+
   kms_webrtc_session_sdp_msg_add_ice_candidate (self, cand);
 }
 
@@ -762,14 +772,15 @@ kms_webrtc_session_component_state_change (KmsIceBaseAgent * agent,
 }
 
 static void
-kms_webrtc_session_set_external_ips_info (KmsWebrtcSession * self,
+kms_webrtc_session_set_network_ifs_info (KmsWebrtcSession * self,
     KmsWebRtcBaseConnection * conn)
 {
-  if (self->external_ips == NULL) {
+  if (self->network_interfaces == NULL) {
     return;
   }
 
-  kms_webrtc_base_connection_set_external_ips_info (conn, self->external_ips);
+  kms_webrtc_base_connection_set_network_ifs_info (conn,
+      self->network_interfaces);
 }
 
 static void
@@ -812,7 +823,7 @@ kms_webrtc_session_gather_candidates (KmsWebrtcSession * self)
   while (g_hash_table_iter_next (&iter, &key, &v)) {
     KmsWebRtcBaseConnection *conn = KMS_WEBRTC_BASE_CONNECTION (v);
 
-    kms_webrtc_session_set_external_ips_info (self, conn);
+    kms_webrtc_session_set_network_ifs_info (self, conn);
     kms_webrtc_session_set_stun_server_info (self, conn);
     kms_webrtc_session_set_relay_info (self, conn);
     if (!kms_ice_base_agent_start_gathering_candidates (conn->agent,
@@ -1704,9 +1715,13 @@ kms_webrtc_session_set_property (GObject * object, guint prop_id,
       g_free (self->pem_certificate);
       self->pem_certificate = g_value_dup_string (value);
       break;
-    case PROP_EXTERNAL_IPS:
-      g_free (self->external_ips);
-      self->external_ips = g_value_dup_string (value);
+    case PROP_NETWORK_INTERFACES:
+      g_free (self->network_interfaces);
+      self->network_interfaces = g_value_dup_string (value);
+      break;
+    case PROP_EXTERNAL_ADDRESS:
+      g_free (self->external_address);
+      self->external_address = g_value_dup_string (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1740,8 +1755,11 @@ kms_webrtc_session_get_property (GObject * object, guint prop_id,
     case PROP_PEM_CERTIFICATE:
       g_value_set_string (value, self->pem_certificate);
       break;
-    case PROP_EXTERNAL_IPS:
-      g_value_set_string (value, self->external_ips);
+    case PROP_NETWORK_INTERFACES:
+      g_value_set_string (value, self->network_interfaces);
+      break;
+    case PROP_EXTERNAL_ADDRESS:
+      g_value_set_string (value, self->external_address);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1768,7 +1786,8 @@ kms_webrtc_session_finalize (GObject * object)
   g_free (self->turn_password);
   g_free (self->turn_address);
   g_free (self->pem_certificate);
-  g_free (self->external_ips);
+  g_free (self->network_interfaces);
+  g_free (self->external_address);
 
   if (self->destroy_data != NULL && self->cb_data != NULL) {
     self->destroy_data (self->cb_data);
@@ -1876,7 +1895,8 @@ kms_webrtc_session_init (KmsWebrtcSession * self)
   self->stun_server_port = DEFAULT_STUN_SERVER_PORT;
   self->turn_url = DEFAULT_STUN_TURN_URL;
   self->pem_certificate = DEFAULT_PEM_CERTIFICATE;
-  self->external_ips = DEFAULT_EXTERNAL_IPS;
+  self->network_interfaces = DEFAULT_NETWORK_INTERFACES;
+  self->external_address = DEFAULT_EXTERNAL_ADDRESS;
   self->gather_started = FALSE;
 
   self->data_channels = g_hash_table_new_full (g_direct_hash,
@@ -1970,11 +1990,17 @@ kms_webrtc_session_class_init (KmsWebrtcSessionClass * klass)
           "Pem certificate to be used in dtls",
           DEFAULT_PEM_CERTIFICATE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_EXTERNAL_IPS,
-      g_param_spec_string ("external-ips",
-          "ExternalIps",
-          "Predefined local IP addresses for gathering ICE candidates",
-          DEFAULT_EXTERNAL_IPS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_NETWORK_INTERFACES,
+      g_param_spec_string ("network-interfaces",
+          "networkInterfaces",
+          "Local network interfaces used for ICE gathering",
+          DEFAULT_NETWORK_INTERFACES, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_EXTERNAL_ADDRESS,
+      g_param_spec_string ("external-address",
+          "externalAddress",
+          "External (public) IP address of the media server",
+          DEFAULT_EXTERNAL_ADDRESS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_DATA_CHANNEL_SUPPORTED,
       g_param_spec_boolean ("data-channel-supported",
