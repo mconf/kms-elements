@@ -21,6 +21,8 @@
 
 #include <commons/kmselementpadtype.h>
 
+#include <nice/interfaces.h>
+
 #define KMS_VIDEO_PREFIX "video_src_"
 #define KMS_AUDIO_PREFIX "audio_src_"
 
@@ -2517,9 +2519,9 @@ on_ice_candidate_check_ip (GstElement * self, gchar * sess_id,
 }
 
 /**
- * Tests setting external IP for gathering of ICE Candidate.
+ * Test setting local network interface to limit ICE candidate gathering.
  */
-GST_START_TEST (set_external_ips_test)
+GST_START_TEST (set_network_interfaces_test)
 {
   GArray *audio_codecs_array, *video_codecs_array;
   gchar *audio_codecs[] = { "opus/48000/1", NULL };
@@ -2530,14 +2532,18 @@ GST_START_TEST (set_external_ips_test)
   GstSDPMessage *offer = NULL, *answer = NULL;
   gboolean ret;
 
-  g_object_set (webrtcendpoint, "external-ips", "127.0.0.1", NULL);
+  // Check that candidates only include the localhost IP
+  g_object_set (webrtcendpoint, "network-interfaces", "lo", NULL);
+
   static const gchar *offer_str = "v=0\r\n"
       "o=mozilla...THIS_IS_SDPARTA-43.0 4115481872190049086 0 IN IP4 0.0.0.0\r\n"
       "a=ice-options:trickle\r\n"
       "a=msid-semantic:WMS *\r\n"
       "m=video 9 UDP/TLS/RTP/SAVPF 120\r\n"
       "c=IN IP4 0.0.0.0\r\n"
-      "a=sendrecv\r\n" "a=mid:sdparta_0\r\n" "a=rtpmap:120 VP8/90000\r\n";
+      "a=sendrecv\r\n"
+      "a=mid:sdparta_0\r\n"
+      "a=rtpmap:120 VP8/90000\r\n";
 
   audio_codecs_array = create_codecs_array (audio_codecs);
   video_codecs_array = create_codecs_array (video_codecs);
@@ -2547,8 +2553,63 @@ GST_START_TEST (set_external_ips_test)
 
   g_array_unref (audio_codecs_array);
   g_array_unref (video_codecs_array);
+
+  gchar *lo_ip = nice_interfaces_get_ip_for_interface ("lo");
   g_signal_connect (G_OBJECT (webrtcendpoint), "on-ice-candidate",
-      G_CALLBACK (on_ice_candidate_check_ip), "127.0.0.1");
+      G_CALLBACK (on_ice_candidate_check_ip), lo_ip);
+
+  fail_unless (gst_sdp_message_new (&offer) == GST_SDP_OK);
+  fail_unless (gst_sdp_message_parse_buffer ((const guint8 *)
+          offer_str, -1, offer) == GST_SDP_OK);
+  g_signal_emit_by_name (webrtcendpoint, "create-session", &sess_id);
+  g_signal_emit_by_name (webrtcendpoint, "process-offer", sess_id, offer,
+      &answer);
+  g_signal_emit_by_name (webrtcendpoint, "gather-candidates", sess_id, &ret);
+  fail_unless (ret);
+  g_object_unref (webrtcendpoint);
+  g_free (sess_id);
+  g_free (lo_ip);
+}
+GST_END_TEST
+
+/**
+ * Test setting local network interface to limit ICE candidate gathering.
+ */
+GST_START_TEST (set_external_address_test)
+{
+  GArray *audio_codecs_array, *video_codecs_array;
+  gchar *audio_codecs[] = { "opus/48000/1", NULL };
+  gchar *video_codecs[] = { "VP8/90000", NULL };
+  GstElement *webrtcendpoint =
+      gst_element_factory_make ("webrtcendpoint", NULL);
+  gchar *sess_id;
+  GstSDPMessage *offer = NULL, *answer = NULL;
+  gboolean ret;
+
+  // Check that candidates only include the localhost IP
+  g_object_set (webrtcendpoint, "external-address", "10.20.30.40", NULL);
+
+  static const gchar *offer_str = "v=0\r\n"
+      "o=mozilla...THIS_IS_SDPARTA-43.0 4115481872190049086 0 IN IP4 0.0.0.0\r\n"
+      "a=ice-options:trickle\r\n"
+      "a=msid-semantic:WMS *\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 120\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=sendrecv\r\n"
+      "a=mid:sdparta_0\r\n"
+      "a=rtpmap:120 VP8/90000\r\n";
+
+  audio_codecs_array = create_codecs_array (audio_codecs);
+  video_codecs_array = create_codecs_array (video_codecs);
+  g_object_set (webrtcendpoint, "num-audio-medias", 1, "audio-codecs",
+      g_array_ref (audio_codecs_array), "num-video-medias", 1, "video-codecs",
+      g_array_ref (video_codecs_array), NULL);
+
+  g_array_unref (audio_codecs_array);
+  g_array_unref (video_codecs_array);
+
+  g_signal_connect (G_OBJECT (webrtcendpoint), "on-ice-candidate",
+      G_CALLBACK (on_ice_candidate_check_ip), "10.20.30.40");
 
   fail_unless (gst_sdp_message_new (&offer) == GST_SDP_OK);
   fail_unless (gst_sdp_message_parse_buffer ((const guint8 *)
@@ -2606,7 +2667,8 @@ webrtcendpoint_test_suite (void)
   //tcase_add_test (tc_chain, test_webrtc_data_channel);
 
   tcase_add_test (tc_chain, process_mid_no_bundle_offer);
-  tcase_add_test (tc_chain, set_external_ips_test);
+  tcase_add_test (tc_chain, set_network_interfaces_test);
+  tcase_add_test (tc_chain, set_external_address_test);
 
   return s;
 }
