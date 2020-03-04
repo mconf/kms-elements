@@ -2,6 +2,7 @@ Source: kms-elements
 Priority: optional
 Maintainer: Kurento <kurento@googlegroups.com>
 Build-Depends: debhelper (>= 9),
+ build-essential,
  cmake,
  ffmpeg | libav-tools,
  gstreamer1.5-nice,
@@ -15,7 +16,6 @@ Build-Depends: debhelper (>= 9),
  libboost-system-dev,
  libboost-test-dev,
  libglibmm-2.4-dev,
- libgstreamer-plugins-base1.5-dev,
  libgstreamer-plugins-base1.5-dev,
  libnice-dev,
  libsigc++-2.0-dev,
