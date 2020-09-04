@@ -251,7 +251,7 @@ kms_ice_nice_agent_new (GMainContext * context)
       nice_agent_new (self->priv->context, NICE_COMPATIBILITY_RFC5245);
 
   GST_DEBUG_OBJECT (self, "Disable UPNP support");
-  g_object_set (self->priv->agent, "upnp", FALSE, NULL);
+  g_object_set (self->priv->agent, "upnp", FALSE, "ice-tcp", FALSE, NULL);
 
   g_signal_connect (self->priv->agent, "new-candidate-full",
       G_CALLBACK (kms_ice_nice_agent_new_candidate_full), self);
