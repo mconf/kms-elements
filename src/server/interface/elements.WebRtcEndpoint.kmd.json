@@ -305,6 +305,11 @@
           "type": "String"
         },
         {
+          "name": "ipIgnoreList",
+          "doc": "List of IP addresses to be ignored in the gathering phase when networkInterfaces is set",
+          "type": "String"
+        },
+        {
           "name": "niceAgentIceTcp",
           "doc": "Enable libnice agent's ice-tcp option",
           "type": "boolean"
