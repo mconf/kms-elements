@@ -388,10 +388,6 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
       GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
           "... (Will add later)");
     }
-    else {
-      GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
-          "... (Error)");
-    }
     return allow_error;
   }
 
@@ -401,10 +397,6 @@ kms_webrtc_session_agent_add_ice_candidate (KmsWebrtcSession * self,
     if (allow_error) {
       GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
           "... (Will add later)");
-    }
-    else {
-      GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, dbg, self,
-          "... (Error)");
     }
     return allow_error;
   }
@@ -593,10 +585,12 @@ kms_webrtc_session_new_candidate (KmsIceBaseAgent * agent,
 
   gboolean is_candidate_ipv6 = kms_ice_candidate_get_ip_version (candidate) == IP_VERSION_6;
 
-  if (self->external_address != NULL) {
+  if (self->external_address != NULL
+      && kms_ice_candidate_get_candidate_type (candidate)
+          == KMS_ICE_CANDIDATE_TYPE_HOST) {
+    // DEPRECATED
     kms_ice_candidate_set_address (candidate, self->external_address);
-    GST_DEBUG_OBJECT (self,
-        "[IceCandidateFound] Mangled local: '%s'",
+    GST_DEBUG_OBJECT (self, "[IceCandidateFound] Mangled local: '%s'",
         kms_ice_candidate_get_candidate (candidate));
   } else if (self->external_ipv4 != NULL && is_candidate_ipv6 == FALSE) {
     kms_ice_candidate_set_address (candidate, self->external_ipv4);
@@ -807,6 +801,9 @@ kms_webrtc_session_set_network_ifs_info (KmsWebrtcSession * self,
     return;
   }
 
+  GST_DEBUG_OBJECT (self, "Use network interfaces: %s",
+      self->network_interfaces);
+
   kms_webrtc_base_connection_set_network_ifs_info (conn,
       self->network_interfaces, self->ip_ignore_list);
 }
@@ -827,6 +824,9 @@ kms_webrtc_session_set_stun_server_info (KmsWebrtcSession * self,
     return;
   }
 
+  GST_DEBUG_OBJECT (self, "Use STUN server: %s:%u", self->stun_server_ip,
+      self->stun_server_port);
+
   kms_webrtc_base_connection_set_stun_server_info (conn, self->stun_server_ip,
       self->stun_server_port);
 }
@@ -838,6 +838,9 @@ kms_webrtc_session_set_relay_info (KmsWebrtcSession * self,
   if (self->turn_address == NULL) {
     return;
   }
+
+  GST_DEBUG_OBJECT (self, "Use TURN server: %s:%u", self->turn_address,
+      self->turn_port);
 
   kms_webrtc_base_connection_set_relay_info (conn, self->turn_address,
       self->turn_port, self->turn_user, self->turn_password,
@@ -1684,13 +1687,28 @@ kms_webrtc_session_parse_turn_url (KmsWebrtcSession * self)
     self->turn_user = g_match_info_fetch_named (match_info, "user");
     self->turn_password = g_match_info_fetch_named (match_info, "password");
     self->turn_address = g_match_info_fetch_named (match_info, "address");
-
     port_str = g_match_info_fetch_named (match_info, "port");
+    turn_transport = g_match_info_fetch_named (match_info, "transport");
+
+    // Build a safe string that can be printed out in the log
+    GString *safe_log = g_string_new ("<user:password>");
+    if (self->turn_address) {
+      g_string_append_c (safe_log, '@');
+      g_string_append (safe_log, self->turn_address);
+    }
+    if (port_str) {
+      g_string_append_c (safe_log, ':');
+      g_string_append (safe_log, port_str);
+    }
+    if (turn_transport) {
+      g_string_append_c (safe_log, '?');
+      g_string_append (safe_log, turn_transport);
+    }
+
     self->turn_port = g_ascii_strtoll (port_str, NULL, 10);
     g_free (port_str);
 
-    self->turn_transport = TURN_PROTOCOL_UDP;   /* default */
-    turn_transport = g_match_info_fetch_named (match_info, "transport");
+    self->turn_transport = TURN_PROTOCOL_UDP;  /* default */
     if (turn_transport != NULL) {
       if (g_strcmp0 ("tcp", turn_transport) == 0) {
         self->turn_transport = TURN_PROTOCOL_TCP;
@@ -1700,16 +1718,8 @@ kms_webrtc_session_parse_turn_url (KmsWebrtcSession * self)
       g_free (turn_transport);
     }
 
-    GString *safe_url = g_string_new ("<user:password>");
-    gchar *separated_url = g_strrstr (self->turn_url, "@");
-    if (separated_url == NULL) {
-      g_string_append_c (safe_url, '@');
-      g_string_append (safe_url, self->turn_url);
-    } else {
-      g_string_append (safe_url, separated_url);
-    }
-    GST_DEBUG_OBJECT (self, "TURN server info set: %s", safe_url->str);
-    g_string_free (safe_url, TRUE);
+    GST_DEBUG_OBJECT (self, "TURN server info set: %s", safe_log->str);
+    g_string_free (safe_log, TRUE);
   } else {
     GST_ELEMENT_ERROR (self, RESOURCE, SETTINGS,
         ("URL '%s' not allowed. It must have this format: 'user:password@address:port(?transport=[udp|tcp|tls])'",
